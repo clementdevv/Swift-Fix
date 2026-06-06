@@ -61,7 +61,7 @@ export default function JobCard({ job }: JobCardProps) {
               )}
               <div className="flex items-center gap-1.5 text-xs text-gray-400 font-bold uppercase tracking-tighter">
                 <MapPin className="w-3 h-3" />
-                Local Pro
+                On-site
               </div>
             </div>
           </div>

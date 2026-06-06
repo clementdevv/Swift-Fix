@@ -15,9 +15,9 @@ export default function Home() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 text-lg font-semibold text-slate-900">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#3B82F6] text-sm font-bold tracking-wider text-white shadow-sm shadow-[#3B82F6]/20">
-              MLP
+              BQ
             </div>
-            <span>My Local Pro</span>
+            <span>Briqoly</span>
           </Link>
 
           {/* Centered Navigation */}
@@ -203,7 +203,8 @@ const CTASection = () => {
               Ready to Connect?
             </h2>
             <p className="text-white/90 text-lg">
-              Join thousands of homeowners and professionals who trust My Local Pro.
+
+              Join thousands of homeowners and professionals who trust Briqoly.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-2">
               <Button size="lg" className="rounded-xl text-base font-semibold gap-2 bg-white text-blue-600 hover:bg-gray-100" asChild>
@@ -230,9 +231,9 @@ const SocialsSection = () => {
       <div className="container mx-auto px-4 max-w-7xl flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#3B82F6] text-sm font-bold tracking-wider text-white">
-            MLP
+            BQ
           </div>
-          <span className="text-lg font-semibold text-white">My Local Pro</span>
+          <span className="text-lg font-semibold text-white">Briqoly</span>
         </div>
         
         <div className="flex items-center gap-6">
@@ -250,10 +251,11 @@ const SocialsSection = () => {
           </Link>
         </div>
 
-        <div className="text-sm text-slate-500">
-          &copy; {new Date().getFullYear()} My Local Pro. All rights reserved.
-        </div>
+        <p className="text-sm text-slate-400 text-center w-full">
+          &copy; {new Date().getFullYear()} Briqoly. All rights reserved.
+        </p>
       </div>
     </footer>
   )
 }
+

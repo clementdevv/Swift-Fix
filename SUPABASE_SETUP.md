@@ -1,6 +1,6 @@
-# My Local Pro - Supabase Authentication Setup
+# Briqoly - Supabase Authentication Setup
 
-This guide will help you set up Supabase authentication for the My Local Pro service platform.
+This guide will help you set up Supabase authentication for the Briqoly service platform.
 
 ## Prerequisites
 

@@ -21,19 +21,31 @@ export function SupabaseProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
 
   useEffect(() => {
-    // Get initial session
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
+    // Use getUser() instead of getSession() for the initial check.
+    // getSession() only reads from local storage and can return stale/null data
+    // immediately after a server-action login before the browser client syncs.
+    // getUser() makes a network request to Supabase, so it always reflects
+    // the true server-side auth state.
+    const initAuth = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        // After confirming the user server-side, sync the local session cache
+        const { data: { session } } = await supabase.auth.getSession()
+        setUser(user ?? null)
+        setSession(session ?? null)
+      } catch {
+        setUser(null)
+        setSession(null)
+      } finally {
+        setLoading(false)
+      }
     }
 
-    getSession()
+    initAuth()
 
-    // Listen for auth changes
+    // Listen for subsequent auth changes (sign in, sign out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         setSession(session)
         setUser(session?.user ?? null)
         setLoading(false)
@@ -41,21 +53,14 @@ export function SupabaseProvider({ children }: { children: React.ReactNode }) {
     )
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const signOut = async () => {
     await supabase.auth.signOut()
   }
 
-  const value = {
-    user,
-    session,
-    loading,
-    signOut,
-  }
-
   return (
-    <SupabaseContext.Provider value={value}>
+    <SupabaseContext.Provider value={{ user, session, loading, signOut }}>
       {children}
     </SupabaseContext.Provider>
   )

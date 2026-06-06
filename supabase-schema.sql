@@ -1,4 +1,4 @@
--- Supabase SQL schema for My Local Pro service platform
+-- Supabase SQL schema for Briqoly service platform
 -- Run this in the Supabase SQL editor or via psql against your project database.
 
 -- Enable necessary extensions

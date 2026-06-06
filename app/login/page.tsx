@@ -1,4 +1,3 @@
-
 // app/login/page.tsx
 'use client'
 
@@ -73,9 +72,9 @@ function LoginForm() {
         {/* Logo and Header */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-[#3B82F6] rounded-full mb-3 shadow-md shadow-[#3B82F6]/20">
-            <span className="text-white tracking-wider font-bold text-lg">MLP</span>
+            <span className="text-white tracking-wider font-bold text-lg">BQ</span>
           </div>
-          <h1 className="text-xl font-semibold text-gray-900">My Local Pro</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Briqoly</h1>
           <p className="text-xs font-normal text-gray-500 mt-1">Service Provider Platform</p>
         </div>
 
