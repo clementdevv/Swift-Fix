@@ -8,7 +8,8 @@ import JobCard, { Job } from '@/app/components/JobCard';
 import { ProtectedRoute } from '@/components/protected-route';
 import DashboardLayout from '@/components/dashboard-layout';
 import { clientNavigation } from '@/lib/navigation';
-import { createClient } from '@/utils/supabase/client';
+import { getCustomerDashboardBookings } from '@/lib/actions/bookings';
+import { getServiceCategories } from '@/lib/actions/services';
 import { Loader2, LayoutDashboard } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -27,78 +28,39 @@ export default function ClientDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const supabase = createClient();
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
 
-      // 1. Fetch Active Jobs
-      const { data: jobs, error: jobsError } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          provider:profiles!jobs_provider_id_fkey (full_name),
-          service:services (name, category)
-        `)
-        .eq('client_id', user.id)
-        .in('status', ['pending', 'accepted', 'in_progress'])
-        .order('created_at', { ascending: false });
+      const [bookings, categories] = await Promise.all([
+        getCustomerDashboardBookings(),
+        getServiceCategories(),
+      ]);
 
-      if (jobsError) throw jobsError;
-
-      // 2. Fetch Completed Jobs (Transaction History)
-      const { data: completed, error: historyError } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          provider:profiles!jobs_provider_id_fkey (full_name),
-          service:services (name, category)
-        `)
-        .eq('client_id', user.id)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (historyError) throw historyError;
-
-      // 3. Fetch Available Services (Discovery)
-      const { data: availableServices, error: servicesError } = await supabase
-        .from('services')
-        .select('*')
-        .eq('status', 'active')
-        .limit(10);
-
-      if (servicesError) throw servicesError;
-
-      // Map Data
-      if (jobs) {
-        setActiveJobs(jobs.map(j => ({
+      setActiveJobs(
+        bookings.active.map((j) => ({
           id: j.id,
-          serviceType: (j.service as any)?.name || j.title || 'General Service',
-          providerName: (j.provider as any)?.full_name || 'Professional',
-          status: j.status as any,
-          date: j.scheduled_at ? new Date(j.scheduled_at).toLocaleDateString() : 'TBD'
-        })));
-      }
+          serviceType: j.serviceType,
+          providerName: j.providerName,
+          status: j.status as Job['status'],
+          date: j.date,
+        }))
+      );
 
-      if (completed) {
-        setHistory(completed.map(j => ({
+      setHistory(
+        bookings.completed.map((j) => ({
           id: j.id,
-          date: j.completed_at ? new Date(j.completed_at).toLocaleDateString() : new Date(j.created_at).toLocaleDateString(),
-          service: (j.service as any)?.name || j.title || 'Service',
-          paymentStatus: 'Paid',
-          amount: j.price ? `$${j.price}` : 'TBD'
-        })));
-      }
+          date: j.date,
+          service: j.service,
+          paymentStatus: j.paymentStatus,
+          amount: j.amount,
+        }))
+      );
 
-      if (availableServices) {
-        setServices(availableServices.map(s => ({
+      setServices(
+        categories.slice(0, 10).map((s) => ({
           id: s.id,
           name: s.name,
-          category: (['emergency', 'urgent'].includes(s.category?.toLowerCase()) ? 'Emergency' : 'Routine') as any
-        })));
-      }
-
+          category: 'Routine' as const,
+        }))
+      );
     } catch (err) {
       console.error('Error loading dashboard data:', err);
     } finally {

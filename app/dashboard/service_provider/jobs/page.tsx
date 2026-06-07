@@ -10,7 +10,7 @@ import {
   AlertCircle, Loader2, RefreshCw, Briefcase,
   Info, User
 } from 'lucide-react'
-import { createClient } from '@/utils/supabase/client'
+import { getProviderBookings, updateBookingStatus } from '@/lib/actions/bookings'
 
 type JobStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
 
@@ -39,50 +39,11 @@ export default function JobRequestsPage() {
     try {
       setLoading(true)
       setAuthError(null)
-      const supabase = createClient()
-
-      const { data: { user }, error: authErr } = await supabase.auth.getUser()
-      if (!user || authErr) {
-        setAuthError('You must be logged in as a service provider to view job requests.')
-        return
-      }
-
-      // Fetch ALL bookings for this provider (all statuses)
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          profiles:customer_id (
-            full_name,
-            phone
-          ),
-          service_categories (
-            name
-          ),
-          service_providers (
-            pricing_info,
-            business_name
-          )
-        `)
-        .eq('provider_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Supabase error fetching jobs:', error)
-        if (error.code === '42501' || error.message.includes('permission')) {
-          setAuthError(
-            'Permission denied. Please ensure the bookings table has the correct Row Level Security policies applied.'
-          )
-        } else {
-          setAuthError(`Error loading jobs: ${error.message}`)
-        }
-        return
-      }
-
-      setJobRequests(data ?? [])
+      const data = await getProviderBookings()
+      setJobRequests(data)
     } catch (err: any) {
       console.error('Error fetching jobs:', err)
-      setAuthError('An unexpected error occurred while loading job requests.')
+      setAuthError(err.message || 'An unexpected error occurred while loading job requests.')
     } finally {
       setLoading(false)
     }
@@ -94,18 +55,8 @@ export default function JobRequestsPage() {
   ) => {
     try {
       setActionLoading(bookingId)
-      const supabase = createClient()
-
-      const { error } = await supabase
-        .from('bookings')
-        .update({ status: newStatus })
-        .eq('id', bookingId)
-
-      if (error) throw error
-
-      // Refresh from server so both provider and client see the correct state
+      await updateBookingStatus(bookingId, newStatus)
       router.refresh()
-      // Also re-fetch local list
       await fetchJobs()
     } catch (err) {
       console.error(`Error updating job to ${newStatus}:`, err)

@@ -2,30 +2,16 @@
 
 import { X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
-
+import { logout } from '@/app/auth/actions'
 interface LogoutModalProps {
   isOpen: boolean
   onClose: () => void
 }
-
 export default function LogoutModal({ isOpen, onClose }: LogoutModalProps) {
   const router = useRouter()
-
   const handleLogout = async () => {
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signOut()
-      
-      if (error) {
-        console.error('Logout error:', error)
-      }
-      
-      router.push('/login')
-    } catch (error) {
-      console.error('Logout error:', error)
-      router.push('/login')
-    }
+    await logout()
+    router.push('/login')
   }
   if (!isOpen) return null
 

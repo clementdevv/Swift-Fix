@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { getServiceCategories } from '@/lib/actions/services'
 import {
   Briefcase, MapPin, Phone, FileText, CheckCircle, ArrowRight,
   ArrowLeft, Zap, Droplet, Shield, Wind, Wrench, Users, Hammer,
@@ -147,21 +147,11 @@ export default function ProviderOnboardingPage() {
         return
       }
 
-      const supabase = createClient()
-      
-      // 2. Fetch service categories from Supabase
-      const { data: cats, error: fetchError } = await supabase
-        .from('service_categories')
-        .select('id, name')
-        .order('name', { ascending: true })
-
-      if (fetchError) {
-        console.warn('Could not fetch categories from Supabase (likely RLS). Using fallbacks.', fetchError)
-        setCategories(FALLBACK_CATEGORIES)
-      } else if (cats && cats.length > 0) {
-        setCategories(cats)
-      } else {
-        console.warn('No categories found in service_categories table. Using fallbacks.')
+      try {
+        const cats = await getServiceCategories()
+        setCategories(cats.length > 0 ? cats : FALLBACK_CATEGORIES)
+      } catch (fetchError) {
+        console.warn('Could not fetch categories. Using fallbacks.', fetchError)
         setCategories(FALLBACK_CATEGORIES)
       }
 

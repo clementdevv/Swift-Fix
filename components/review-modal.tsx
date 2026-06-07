@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { createReview } from '@/lib/actions/reviews'
 import { X, Star, MessageSquare, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from './ui/button'
 
@@ -37,25 +37,12 @@ export default function ReviewModal({
     setError(null)
 
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('You must be logged in to leave a review')
-
-      // Insert into reviews table
-      const { error: reviewError } = await supabase
-        .from('reviews')
-        .insert({
-          booking_id: bookingId,
-          reviewer_id: user.id,
-          reviewee_id: providerId,
-          rating,
-          comment
-        })
-
-      if (reviewError) throw reviewError
-
-      // Mark booking as reviewed (optional, if column exists)
-      // await supabase.from('bookings').update({ reviewed: true }).eq('id', bookingId)
+      await createReview({
+        bookingId,
+        revieweeId: providerId,
+        rating,
+        comment,
+      })
 
       setSuccess(true)
       setTimeout(() => {

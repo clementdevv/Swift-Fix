@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+
 import {
   Menu, X, Bell,
   Home, Search, Package, MessageSquare, Star, CreditCard,
@@ -10,6 +10,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import LogoutModal from '@/app/components/logout-modal'
+import { getCurrentUserProfile } from '@/lib/actions/profile'
+import { getRecentNotifications, markNotificationRead } from '@/lib/actions/notifications'
 
 interface UserProfile {
   id: string
@@ -84,43 +86,21 @@ export default function DashboardLayout({ children, userType, navigation }: Dash
 
   const fetchUserProfile = async () => {
     try {
-      const supabase = createClient()
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) { router.push('/login'); return }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle()
-
-      if (!profile) { router.push('/login'); return }
+      const profile = await getCurrentUserProfile()
 
       setUser({
         id: profile.id,
-        email: authUser.email ?? '',
-        full_name: profile.full_name,
-        user_type: profile.role ?? userType,
+        email: profile.email,
+        full_name: profile.fullName,
+        user_type: (profile.userType as 'customer' | 'provider') ?? userType,
       })
 
-      // Fetch notifications (gracefully handle missing table)
-      try {
-        const { data: notifs } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('user_id', authUser.id)
-          .order('created_at', { ascending: false })
-          .limit(5)
-
-        if (notifs) {
-          setNotifications(notifs)
-          setUnreadCount(notifs.filter((n: NotificationItem) => !n.read).length)
-        }
-      } catch {
-        // notifications table may not exist yet — fail silently
-      }
+      const notifs = await getRecentNotifications(5)
+      setNotifications(notifs)
+      setUnreadCount(notifs.filter((n) => !n.read).length)
     } catch (error) {
       console.error('Error fetching user profile:', error)
+      router.push('/login')
     } finally {
       setLoading(false)
     }
@@ -128,8 +108,7 @@ export default function DashboardLayout({ children, userType, navigation }: Dash
 
   const markNotifRead = async (id: string) => {
     try {
-      const supabase = createClient()
-      await supabase.from('notifications').update({ read: true }).eq('id', id)
+      await markNotificationRead(id)
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
       setUnreadCount(prev => Math.max(0, prev - 1))
     } catch { /* silent */ }

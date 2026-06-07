@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/utils/supabase/client'
+import { getCustomerBookings } from '@/lib/actions/bookings'
 import { ProtectedRoute } from '@/components/protected-route'
 import DashboardLayout from '@/components/dashboard-layout'
 import { clientNavigation } from '@/lib/navigation'
@@ -425,51 +425,26 @@ export default function MyBookingsPage() {
   const fetchBookings = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
-      
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      const data = await getCustomerBookings()
 
-      const { data, error } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          provider:profiles!jobs_provider_id_fkey (
-            full_name
-          ),
-          service:services (
-            name,
-            price
-          ),
-          reviews (
-            id
-          )
-        `)
-        .eq('customer_id', user.id)
-        .order('scheduled_date', { ascending: false })
-
-      if (error) throw error
-
-      if (data) {
-        const mappedBookings: Booking[] = data.map(b => ({
-          id: b.id,
-          provider_id: b.provider_id,
-          providerName: (b.provider as any)?.full_name || 'Professional',
-          providerAvatar: ((b.provider as any)?.full_name || 'P')[0].toUpperCase(),
-          providerRating: 5.0,
-          service: (b.service as any)?.name || b.title || 'Service',
-          serviceId: ((b.service as any)?.name || b.title || '').toLowerCase(),
-          status: b.status as BookingStatus,
-          scheduledDate: b.scheduled_at ? formatDate(b.scheduled_at) : formatDate(b.created_at),
-          scheduledTime: b.scheduled_at ? formatTime(new Date(b.scheduled_at).toTimeString().split(' ')[0]) : '',
-          location: b.location || 'Remote/On-site',
-          estimatedDuration: 'Flexible',
-          estimatedCost: b.price ? `$${b.price}` : ((b.service as any)?.price ? `$${(b.service as any).price}` : 'Quoted'),
-          notes: b.description,
-          reviewed: Array.isArray(b.reviews) ? b.reviews.length > 0 : !!b.reviews
-        }))
-        setBookings(mappedBookings)
-      }
+      const mappedBookings: Booking[] = data.map((b) => ({
+        id: b.id,
+        provider_id: b.providerId,
+        providerName: b.providerName,
+        providerAvatar: b.providerName[0]?.toUpperCase() ?? 'P',
+        providerRating: 5.0,
+        service: b.service,
+        serviceId: b.service.toLowerCase(),
+        status: b.status as BookingStatus,
+        scheduledDate: formatDate(b.scheduledDate),
+        scheduledTime: formatTime(b.scheduledTime),
+        location: 'Remote/On-site',
+        estimatedDuration: 'Flexible',
+        estimatedCost: 'Quoted',
+        notes: b.notes ?? undefined,
+        reviewed: b.reviewed,
+      }))
+      setBookings(mappedBookings)
     } catch (err) {
       console.error('Error fetching bookings:', err)
     } finally {

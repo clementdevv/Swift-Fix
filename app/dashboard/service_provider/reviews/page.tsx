@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Star, StarHalf, Loader2, MessageCircle } from 'lucide-react'
-import { createClient } from '@/utils/supabase/client'
+import { getProviderReviews } from '@/lib/actions/reviews'
 
 export default function ReviewsPage() {
   const [reviews, setReviews] = useState<any[]>([])
@@ -21,46 +21,26 @@ export default function ReviewsPage() {
   const fetchReviews = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      const data = await getProviderReviews()
+      setReviews(data)
 
-      const { data, error } = await supabase
-        .from('reviews')
-        .select(`
-          *,
-          profiles:reviewer_id (full_name),
-          bookings (
-            service_categories (name)
-          )
-        `)
-        .eq('reviewee_id', user.id)
-        .order('created_at', { ascending: false })
+      const total = data.length
+      if (total > 0) {
+        const sum = data.reduce((acc, r) => acc + r.rating, 0)
+        const avg = sum / total
 
-      if (error) throw error
+        const dist = [0, 0, 0, 0, 0]
+        data.forEach((r) => {
+          if (r.rating >= 1 && r.rating <= 5) {
+            dist[5 - r.rating]++
+          }
+        })
 
-      if (data) {
-        setReviews(data)
-        
-        // Calculate stats
-        const total = data.length
-        if (total > 0) {
-          const sum = data.reduce((acc, r) => acc + r.rating, 0)
-          const avg = sum / total
-          
-          const dist = [0, 0, 0, 0, 0]
-          data.forEach(r => {
-            if (r.rating >= 1 && r.rating <= 5) {
-              dist[5 - r.rating]++
-            }
-          })
-          
-          setStats({
-            average: parseFloat(avg.toFixed(1)),
-            total,
-            distribution: dist.map(count => Math.round((count / total) * 100))
-          })
-        }
+        setStats({
+          average: parseFloat(avg.toFixed(1)),
+          total,
+          distribution: dist.map((count) => Math.round((count / total) * 100)),
+        })
       }
     } catch (err) {
       console.error('Error fetching reviews:', err)

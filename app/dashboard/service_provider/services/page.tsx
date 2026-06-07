@@ -1,7 +1,14 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import {
+  getServiceCategories,
+  getProviderServices,
+  createProviderService,
+  updateProviderService,
+  deleteProviderService,
+  toggleProviderServiceActive,
+} from '@/lib/actions/services'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -48,38 +55,15 @@ export default function MyServicesPage() {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      // Fetch Categories
-      const { data: catData } = await supabase.from('service_categories').select('*').order('name')
-      if (catData) setCategories(catData)
-
-      // Fetch Provider Services
-      const { data: srvData, error: srvErr } = await supabase
-        .from('provider_services')
-        .select(`
-          *,
-          service_categories ( name )
-        `)
-        .eq('provider_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (srvErr) throw srvErr
-
-      if (srvData) {
-        setServices(srvData.map(s => ({
-          ...s,
-          category_name: s.service_categories?.name
-        })))
-      }
-    } catch (err: any) {
-      if (err.code === '42P01') {
-        setError("The 'provider_services' table does not exist yet. Please run the SQL setup script.")
-      } else {
-        setError(err.message || 'Failed to load services.')
-      }
+      const [catData, srvData] = await Promise.all([
+        getServiceCategories(),
+        getProviderServices(),
+      ])
+      setCategories(catData)
+      setServices(srvData)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load services.'
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -112,23 +96,19 @@ export default function MyServicesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this service?')) return
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from('provider_services').delete().eq('id', id)
-      if (error) throw error
+      await deleteProviderService(id)
       setServices(prev => prev.filter(s => s.id !== id))
-    } catch (err: any) {
-      alert(err.message)
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to delete service.')
     }
   }
 
   const handleToggleActive = async (id: string, currentActive: boolean) => {
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from('provider_services').update({ active: !currentActive }).eq('id', id)
-      if (error) throw error
+      await toggleProviderServiceActive(id, !currentActive)
       setServices(prev => prev.map(s => s.id === id ? { ...s, active: !currentActive } : s))
-    } catch (err: any) {
-      alert(err.message)
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to update service.')
     }
   }
 
@@ -138,44 +118,28 @@ export default function MyServicesPage() {
     setError(null)
     
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Not authenticated")
-
       if (editingId) {
-        // Update
-        const { error: updateErr } = await supabase
-          .from('provider_services')
-          .update({
-            title: formData.title,
-            description: formData.description,
-            price: formData.price,
-            service_category_id: formData.service_category_id,
-            active: formData.active
-          })
-          .eq('id', editingId)
-          
-        if (updateErr) throw updateErr
+        await updateProviderService(editingId, {
+          title: formData.title,
+          description: formData.description,
+          price: formData.price,
+          service_category_id: formData.service_category_id,
+          active: formData.active,
+        })
       } else {
-        // Insert
-        const { error: insertErr } = await supabase
-          .from('provider_services')
-          .insert({
-            provider_id: user.id,
-            title: formData.title,
-            description: formData.description,
-            price: formData.price,
-            service_category_id: formData.service_category_id,
-            active: formData.active
-          })
-          
-        if (insertErr) throw insertErr
+        await createProviderService({
+          title: formData.title,
+          description: formData.description,
+          price: formData.price,
+          service_category_id: formData.service_category_id,
+          active: formData.active,
+        })
       }
-      
+
       setIsModalOpen(false)
-      fetchData() // refresh list
-    } catch (err: any) {
-      setError(err.message)
+      fetchData()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save service.')
     } finally {
       setSaving(false)
     }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/utils/supabase/client'
+import { getBookingById } from '@/lib/actions/bookings'
 import { ProtectedRoute } from '@/components/protected-route'
 import DashboardLayout from '@/components/dashboard-layout'
 import { clientNavigation } from '@/lib/navigation'
@@ -184,34 +184,9 @@ export default function BookingDetailPage() {
   const fetchBooking = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
+      const data = await getBookingById(bookingId)
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.replace('/login')
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          service_providers (
-            business_name,
-            pricing_info
-          ),
-          service_categories (
-            name
-          ),
-          reviews (
-            id
-          )
-        `)
-        .eq('id', bookingId)
-        .eq('customer_id', user.id)
-        .single()
-
-      if (error || !data) {
+      if (!data) {
         setNotFound(true)
         return
       }
@@ -219,20 +194,20 @@ export default function BookingDetailPage() {
       setBooking({
         id: data.id,
         provider_id: data.provider_id,
-        providerName: data.service_providers?.business_name || 'Service Professional',
-        providerAvatar: (data.service_providers?.business_name || 'S')[0].toUpperCase(),
-        providerRating: 5.0,
-        service: data.service_categories?.name || 'Service',
-        serviceId: (data.service_categories?.name || '').toLowerCase(),
+        providerName: data.providerName,
+        providerAvatar: data.providerAvatar,
+        providerRating: data.providerRating,
+        service: data.service,
+        serviceId: data.serviceId,
         status: data.status as BookingStatus,
-        scheduledDate: formatDate(data.scheduled_date),
-        scheduledTime: formatTime(data.scheduled_time),
-        location: data.location || 'On-site / Remote',
-        estimatedDuration: 'Flexible',
-        estimatedCost: data.service_providers?.pricing_info || 'To be quoted',
-        notes: data.service_description,
-        reviewed: Array.isArray(data.reviews) ? data.reviews.length > 0 : !!data.reviews,
-        createdAt: data.created_at,
+        scheduledDate: formatDate(data.scheduledDate),
+        scheduledTime: formatTime(data.scheduledTime),
+        location: data.location,
+        estimatedDuration: data.estimatedDuration,
+        estimatedCost: data.estimatedCost,
+        notes: data.notes ?? undefined,
+        reviewed: data.reviewed,
+        createdAt: data.createdAt,
       })
     } catch (err) {
       console.error('Error fetching booking detail:', err)

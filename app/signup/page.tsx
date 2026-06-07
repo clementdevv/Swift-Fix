@@ -100,7 +100,7 @@ export default function SignupPage() {
       if (result?.error) {
         setRegisterError(result.error)
       } else if (result?.success) {
-        router.push('/login?message=Check your email to confirm your account')
+        router.push('/login?message=Account created. Please sign in.')
       } else {
         setRegisterError('Registration failed. Please try again.')
       }

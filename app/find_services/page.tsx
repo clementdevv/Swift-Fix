@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { getOnboardedProviders } from '@/lib/actions/providers'
 import Link from 'next/link'
 import { ProtectedRoute } from '@/components/protected-route'
 import DashboardLayout from '@/components/dashboard-layout'
@@ -49,26 +49,9 @@ export default function FindServicesPage() {
   const fetchProviders = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('service_providers')
-        .select(`
-          *,
-          profiles (
-            full_name
-          )
-        `)
-        .eq('onboarding_completed', true)
-
-      if (error) {
-        console.error('Supabase Error:', error)
-        throw error
-      }
-
-      console.log('Supabase Data (Service Providers):', data)
+      const data = await getOnboardedProviders()
 
       if (data) {
-        // Map data to UI format
         const mappedData = data.map((p: any) => {
           // Ensure services is always an array, even if the DB returns null or a string
           let skillsArray: string[] = [];

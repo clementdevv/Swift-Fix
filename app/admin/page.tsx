@@ -132,7 +132,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-600">Welcome, {user?.user_metadata?.full_name || 'Admin'}</span>
+                <span className="text-sm text-gray-600">Welcome, {user?.name || 'Admin'}</span>
                 <button className="p-2 text-gray-500 hover:text-gray-700">
                   <LogOut className="w-5 h-5" />
                 </button>

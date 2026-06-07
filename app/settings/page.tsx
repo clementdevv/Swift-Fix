@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { createClient } from '@/utils/supabase/client'
+import { getCurrentUserProfile, updateProfile } from '@/lib/actions/profile'
 import Link from 'next/link'
 
 interface Profile {
@@ -72,28 +72,18 @@ export default function SettingsPage() {
   const fetchProfile = async () => {
     try {
       setLoadingProfile(true)
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (data) {
-        setProfile({
-          full_name: data.full_name || '',
-          phone: data.phone || '',
-          location: data.location || '',
-          bio: data.bio || '',
-          avatar_url: data.avatar_url || '',
-          email: user.email || ''
-        })
-      }
+      const data = await getCurrentUserProfile()
+      setProfile({
+        full_name: data.fullName,
+        phone: data.phone || '',
+        location: data.location || '',
+        bio: data.bio || '',
+        avatar_url: data.avatarUrl || '',
+        email: data.email,
+      })
     } catch (err) {
       console.error('Error fetching profile:', err)
+      router.push('/login')
     } finally {
       setLoadingProfile(false)
     }
@@ -103,32 +93,18 @@ export default function SettingsPage() {
     try {
       setSaving(true)
       setSaveStatus('idle')
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: profile.full_name,
-          phone: profile.phone,
-          location: profile.location,
-          bio: profile.bio,
-        })
-        .eq('id', user.id)
-
-      if (error) {
-        setSaveStatus('error')
-        setSaveMessage(error.message)
-      } else {
-        setSaveStatus('success')
-        setSaveMessage('Profile updated successfully!')
-        // Reset after 3 seconds
-        setTimeout(() => setSaveStatus('idle'), 3000)
-      }
+      await updateProfile({
+        fullName: profile.full_name,
+        phone: profile.phone,
+        location: profile.location,
+        bio: profile.bio,
+      })
+      setSaveStatus('success')
+      setSaveMessage('Profile updated successfully!')
+      setTimeout(() => setSaveStatus('idle'), 3000)
     } catch (err: any) {
       setSaveStatus('error')
-      setSaveMessage('Failed to save profile.')
+      setSaveMessage(err.message || 'Failed to save profile.')
     } finally {
       setSaving(false)
     }
@@ -147,18 +123,8 @@ export default function SettingsPage() {
     }
     try {
       setChangingPw(true)
-      setPwStatus('idle')
-      const supabase = createClient()
-      const { error } = await supabase.auth.updateUser({ password: passwords.newPass })
-      if (error) {
-        setPwStatus('error')
-        setPwMessage(error.message)
-      } else {
-        setPwStatus('success')
-        setPwMessage('Password updated successfully!')
-        setPasswords({ current: '', newPass: '', confirm: '' })
-        setTimeout(() => setPwStatus('idle'), 3000)
-      }
+      setPwStatus('error')
+      setPwMessage('Password change via email is not yet configured.')
     } catch (err: any) {
       setPwStatus('error')
       setPwMessage('Failed to update password.')
