@@ -8,7 +8,7 @@ import { SupabaseProvider } from '@/lib/supabase-context'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'My Local Pro - Service Provider Platform',
+  title: 'Briqoly - Service Provider Platform',
   description: 'Professional service management platform for technicians and service providers',
 }
 

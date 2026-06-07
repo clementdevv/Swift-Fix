@@ -78,7 +78,15 @@ export async function middleware(request: NextRequest) {
 
   const userRole = profile?.user_type || 'customer'
 
-  // Role-based route protection
+  // Redirect authenticated users away from auth pages
+  const authPages = ['/login', '/signup', '/forgot-password']
+  if (authPages.some(p => pathname.startsWith(p))) {
+    if (userRole === 'provider') {
+      return NextResponse.redirect(new URL('/dashboard/service_provider', request.url))
+    }
+    return NextResponse.redirect(new URL('/dashboard/client', request.url))
+  }
+
   const pathname = request.nextUrl.pathname
 
   // Admin routes

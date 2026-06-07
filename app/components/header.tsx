@@ -24,7 +24,7 @@ export default function Header({ toggleSidebar }: HeaderProps) {
             
             <div className="hidden lg:block">
               <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                My Local Pro
+                Briqoly
               </h1>
             </div>
             

@@ -27,28 +27,28 @@ export default function ServiceProviderDashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. Fetch All Bookings for this provider
-      const { data: bookings, error } = await supabase
-        .from('bookings')
+      // 1. Fetch All Jobs for this provider
+      const { data: jobs, error } = await supabase
+        .from('jobs')
         .select(`
           *,
-          profiles:customer_id (full_name),
-          service_categories (name),
-          service_providers (pricing_info)
+          customer:profiles!jobs_client_id_fkey (full_name),
+          service:services (name, price)
         `)
         .eq('provider_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      if (bookings) {
+      if (jobs) {
+        const bookings = jobs; // Keep the 'bookings' variable name to minimize further changes
         // --- Calculate Stats ---
         const completed = bookings.filter(b => b.status === 'completed');
-        const active = bookings.filter(b => b.status === 'upcoming' || b.status === 'in_progress');
+        const active = bookings.filter(b => ['accepted', 'in_progress'].includes(b.status));
         const pending = bookings.filter(b => b.status === 'pending');
         
         const totalRevenue = completed.reduce((acc, curr) => {
-          const price = parseFloat(curr.service_providers?.pricing_info?.replace(/[^0-9.]/g, '') || '0');
+          const price = parseFloat(String(curr.price || (curr.service as any)?.price || '0').replace(/[^0-9.]/g, ''));
           return acc + price;
         }, 0);
 
@@ -86,10 +86,10 @@ export default function ServiceProviderDashboard() {
         // --- Map Recent Orders ---
         const mappedOrders: OrderItem[] = bookings.slice(0, 5).map(b => ({
           id: b.id,
-          title: b.service_categories?.name || 'General Service',
-          amount: b.service_providers?.pricing_info || 'Quoted',
+          title: (b.service as any)?.name || b.title || 'General Service',
+          amount: b.price ? `$${b.price}` : ((b.service as any)?.price ? `$${(b.service as any).price}` : 'Quoted'),
           status: b.status as any,
-          date: new Date(b.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          date: b.scheduled_at ? new Date(b.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD'
         }));
         setOrders(mappedOrders);
 
@@ -98,7 +98,7 @@ export default function ServiceProviderDashboard() {
           id: b.id,
           type: 'order',
           title: b.status === 'pending' ? 'New booking request' : `Booking ${b.status}`,
-          description: `${b.service_categories?.name} for ${b.profiles?.full_name || 'Client'}`,
+          description: `${(b.service as any)?.name || 'Service'} for ${(b.customer as any)?.full_name || 'Client'}`,
           time: new Date(b.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           icon: b.status === 'completed' ? CheckCircle : FileText,
           color: b.status === 'completed' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600',
@@ -108,10 +108,10 @@ export default function ServiceProviderDashboard() {
         // --- Map Transaction History (Completed Bookings) ---
         const mappedHistory: Transaction[] = completed.slice(0, 5).map(b => ({
           id: b.id,
-          date: new Date(b.scheduled_date).toLocaleDateString(),
-          service: b.service_categories?.name || 'Service',
+          date: b.scheduled_at ? new Date(b.scheduled_at).toLocaleDateString() : new Date(b.created_at).toLocaleDateString(),
+          service: (b.service as any)?.name || b.title || 'Service',
           paymentStatus: 'Paid',
-          amount: b.service_providers?.pricing_info || '$0'
+          amount: b.price ? `$${b.price}` : ((b.service as any)?.price ? `$${(b.service as any).price}` : '$0')
         }));
         setHistory(mappedHistory);
       }

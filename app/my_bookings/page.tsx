@@ -431,15 +431,15 @@ export default function MyBookingsPage() {
       if (!user) return
 
       const { data, error } = await supabase
-        .from('bookings')
+        .from('jobs')
         .select(`
           *,
-          service_providers (
-            business_name,
-            pricing_info
+          provider:profiles!jobs_provider_id_fkey (
+            full_name
           ),
-          service_categories (
-            name
+          service:services (
+            name,
+            price
           ),
           reviews (
             id
@@ -454,18 +454,18 @@ export default function MyBookingsPage() {
         const mappedBookings: Booking[] = data.map(b => ({
           id: b.id,
           provider_id: b.provider_id,
-          providerName: b.service_providers?.business_name || 'Professional',
-          providerAvatar: (b.service_providers?.business_name || 'P')[0].toUpperCase(),
+          providerName: (b.provider as any)?.full_name || 'Professional',
+          providerAvatar: ((b.provider as any)?.full_name || 'P')[0].toUpperCase(),
           providerRating: 5.0,
-          service: b.service_categories?.name || 'Service',
-          serviceId: (b.service_categories?.name || '').toLowerCase(),
+          service: (b.service as any)?.name || b.title || 'Service',
+          serviceId: ((b.service as any)?.name || b.title || '').toLowerCase(),
           status: b.status as BookingStatus,
-          scheduledDate: formatDate(b.scheduled_date),
-          scheduledTime: formatTime(b.scheduled_time),
-          location: 'Remote/On-site',
+          scheduledDate: b.scheduled_at ? formatDate(b.scheduled_at) : formatDate(b.created_at),
+          scheduledTime: b.scheduled_at ? formatTime(new Date(b.scheduled_at).toTimeString().split(' ')[0]) : '',
+          location: b.location || 'Remote/On-site',
           estimatedDuration: 'Flexible',
-          estimatedCost: b.service_providers?.pricing_info || 'Quoted',
-          notes: b.service_description,
+          estimatedCost: b.price ? `$${b.price}` : ((b.service as any)?.price ? `$${(b.service as any).price}` : 'Quoted'),
+          notes: b.description,
           reviewed: Array.isArray(b.reviews) ? b.reviews.length > 0 : !!b.reviews
         }))
         setBookings(mappedBookings)

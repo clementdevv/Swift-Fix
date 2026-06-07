@@ -1,0 +1,215 @@
+
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // URL lives in prisma.config.ts (Prisma 7 requirement)
+}
+
+// ─── NextAuth / Auth.js models ───────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  password      String?   // bcrypt hash for Credentials provider
+
+  accounts Account[]
+  sessions Session[]
+  profile  Profile?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─── App enums ───────────────────────────────────────────────────────────────
+
+enum UserType {
+  CUSTOMER
+  PROVIDER
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ─── App models ─────────────────────────────────────────────────────────────
+
+model Profile {
+  id        String   @id
+  user      User     @relation(fields: [id], references: [id], onDelete: Cascade)
+  fullName  String?  @map("full_name")
+  phone     String?
+  bio       String?
+  location  String?
+  avatarUrl String?  @map("avatar_url")
+  userType  UserType @default(CUSTOMER) @map("user_type")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  providerProfile  ServiceProvider?
+  customerBookings Booking[]         @relation("CustomerBookings")
+  providerBookings Booking[]         @relation("ProviderBookings")
+  providerServices ProviderService[]
+  reviewsWritten   Review[]          @relation("ReviewsWritten")
+  reviewsReceived  Review[]          @relation("ReviewsReceived")
+  notifications    Notification[]
+
+  @@map("profiles")
+}
+
+model ServiceProvider {
+  userId              String   @id @map("user_id")
+  profile             Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName        String?  @map("business_name")
+  bio                 String?
+  phone               String?
+  location            String?
+  yearsExp            Int?     @map("years_exp")
+  serviceOffered      String?  @map("service_offered")
+  skills              String[] @default([])
+  categories          String[] @default([])
+  pricingInfo         String?  @map("pricing_info")
+  paymentMethod       String?  @map("payment_method")
+  paymentDetails      String?  @map("payment_details")
+  profileImage        String?  @map("profile_image")
+  onboardingCompleted Boolean  @default(false) @map("onboarding_completed")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("service_providers")
+}
+
+model ServiceCategory {
+  id               String            @id @default(cuid())
+  name             String            @unique
+  providerServices ProviderService[]
+  bookings         Booking[]
+
+  @@map("service_categories")
+}
+
+model ProviderService {
+  id                String           @id @default(cuid())
+  providerId        String           @map("provider_id")
+  provider          Profile          @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  serviceCategoryId String?          @map("service_category_id")
+  serviceCategory   ServiceCategory? @relation(fields: [serviceCategoryId], references: [id])
+  title             String
+  description       String?
+  price             String?
+  active            Boolean          @default(true)
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  @@map("provider_services")
+}
+
+model Booking {
+  id                 String        @id @default(cuid())
+  customerId         String        @map("customer_id")
+  customer           Profile       @relation("CustomerBookings", fields: [customerId], references: [id])
+  providerId         String        @map("provider_id")
+  provider           Profile       @relation("ProviderBookings", fields: [providerId], references: [id])
+  categoryId         String        @map("category_id")
+  category           ServiceCategory @relation(fields: [categoryId], references: [id])
+  scheduledDate      DateTime      @map("scheduled_date") @db.Date
+  scheduledTime      String        @map("scheduled_time")
+  serviceDescription String?       @map("service_description")
+  status             BookingStatus @default(PENDING)
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  reviews       Review[]
+  notifications Notification[]
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([status])
+  @@map("bookings")
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  bookingId    String   @map("booking_id")
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  reviewerId   String   @map("reviewer_id")
+  reviewer     Profile  @relation("ReviewsWritten", fields: [reviewerId], references: [id])
+  revieweeId   String   @map("reviewee_id")
+  reviewee     Profile  @relation("ReviewsReceived", fields: [revieweeId], references: [id])
+  rating       Int
+  comment      String?
+  helpfulVotes Int      @default(0) @map("helpful_votes")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("reviews")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String
+  read      Boolean  @default(false)
+  bookingId String?  @map("booking_id")
+  booking   Booking? @relation(fields: [bookingId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("notifications")
+}

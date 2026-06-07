@@ -277,3 +277,51 @@ export async function completeProviderOnboarding(payload: {
     return { error: err.message || 'An unexpected internal error occurred' }
   }
 }
+
+/* =========================
+   FORGOT PASSWORD
+   Uses a direct fetch to the Supabase Auth REST API.
+   The SSR cookie-based client cannot send recovery emails reliably
+   because resetPasswordForEmail is a client-facing auth method.
+========================= */
+export async function forgotPassword(formData: FormData) {
+  const email = formData.get('email') as string
+
+  if (!email) {
+    return { error: 'Email is required' }
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { error: 'Server configuration error. Please contact support.' }
+  }
+
+  // Determine the correct redirect URL depending on environment.
+  // NEXT_PUBLIC_SITE_URL should be set to the Vercel URL in production.
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const redirectTo = `${siteUrl}/auth/reset-password`
+
+  console.log('--- Password Reset Requested ---', { email, redirectTo })
+
+  const res = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': supabaseAnonKey,
+      'Authorization': `Bearer ${supabaseAnonKey}`,
+    },
+    body: JSON.stringify({ email, gotrue_meta_security: {} }),
+  })
+
+  // Supabase returns 200 even for non-existent emails (security best practice)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    console.error('Supabase Reset Error:', body)
+    return { error: body?.msg || body?.error_description || 'Failed to send reset email.' }
+  }
+
+  console.log('Supabase accepted the reset request. Email dispatched if account exists.')
+  return { success: true }
+}

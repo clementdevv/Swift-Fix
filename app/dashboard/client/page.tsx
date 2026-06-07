@@ -32,68 +32,70 @@ export default function ClientDashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. Fetch Active Bookings
-      const { data: bookings, error: bookingsError } = await supabase
-        .from('bookings')
+      // 1. Fetch Active Jobs
+      const { data: jobs, error: jobsError } = await supabase
+        .from('jobs')
         .select(`
           *,
-          service_providers (business_name, pricing_info),
-          service_categories (name)
+          provider:profiles!jobs_provider_id_fkey (full_name),
+          service:services (name, category)
         `)
-        .eq('customer_id', user.id)
-        .in('status', ['pending', 'upcoming', 'confirmed', 'in_progress'])
+        .eq('client_id', user.id)
+        .in('status', ['pending', 'accepted', 'in_progress'])
         .order('created_at', { ascending: false });
 
-      if (bookingsError) throw bookingsError;
+      if (jobsError) throw jobsError;
 
-      // 2. Fetch Completed Bookings (Transaction History)
+      // 2. Fetch Completed Jobs (Transaction History)
       const { data: completed, error: historyError } = await supabase
-        .from('bookings')
+        .from('jobs')
         .select(`
           *,
-          service_providers (business_name, pricing_info),
-          service_categories (name)
+          provider:profiles!jobs_provider_id_fkey (full_name),
+          service:services (name, category)
         `)
-        .eq('customer_id', user.id)
+        .eq('client_id', user.id)
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
         .limit(5);
 
       if (historyError) throw historyError;
 
-      // 3. Fetch Service Categories
-      const { data: categories, error: categoriesError } = await supabase
-        .from('service_categories')
-        .select('*');
+      // 3. Fetch Available Services (Discovery)
+      const { data: availableServices, error: servicesError } = await supabase
+        .from('services')
+        .select('*')
+        .eq('status', 'active')
+        .limit(10);
 
-      if (categoriesError) throw categoriesError;
+      if (servicesError) throw servicesError;
 
       // Map Data
-      if (bookings) {
-        setActiveJobs(bookings.map(b => ({
-          id: b.id,
-          serviceType: b.service_categories?.name || 'General Service',
-          providerName: b.service_providers?.business_name || 'Professional',
-          status: b.status as any,
-          date: new Date(b.scheduled_date).toLocaleDateString()
+      if (jobs) {
+        setActiveJobs(jobs.map(j => ({
+          id: j.id,
+          serviceType: (j.service as any)?.name || j.title || 'General Service',
+          providerName: (j.provider as any)?.full_name || 'Professional',
+          status: j.status as any,
+          date: j.scheduled_at ? new Date(j.scheduled_at).toLocaleDateString() : 'TBD'
         })));
       }
 
       if (completed) {
-        setHistory(completed.map(b => ({
-          id: b.id,
-          date: new Date(b.created_at).toLocaleDateString(),
-          service: b.service_categories?.name || 'Service',
+        setHistory(completed.map(j => ({
+          id: j.id,
+          date: j.completed_at ? new Date(j.completed_at).toLocaleDateString() : new Date(j.created_at).toLocaleDateString(),
+          service: (j.service as any)?.name || j.title || 'Service',
           paymentStatus: 'Paid',
-          amount: b.service_providers?.pricing_info || '$0'
+          amount: j.price ? `$${j.price}` : 'TBD'
         })));
       }
 
-      if (categories) {
-        setServices(categories.map(c => ({
-          id: c.id,
-          name: c.name,
-          category: (['plumber', 'electrician', 'emergency'].includes(c.name.toLowerCase()) ? 'Emergency' : 'Routine') as any
+      if (availableServices) {
+        setServices(availableServices.map(s => ({
+          id: s.id,
+          name: s.name,
+          category: (['emergency', 'urgent'].includes(s.category?.toLowerCase()) ? 'Emergency' : 'Routine') as any
         })));
       }
 

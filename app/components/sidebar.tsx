@@ -56,7 +56,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         <div className="flex flex-col h-full">
           <div className="p-6 border-b border-border">
             <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              My Local Pro
+              Briqoly
             </h1>
             <p className="text-xs text-muted-foreground mt-1">Service Provider Platform</p>
           </div>
