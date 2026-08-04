@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { getServiceCategories } from '@/lib/actions/services'
 import {
-  Briefcase, MapPin, Phone, FileText, CheckCircle, ArrowRight,
-  ArrowLeft, Zap, Droplet, Shield, Wind, Wrench, Users, Hammer,
-  Lightbulb, Thermometer, AlertCircle, Loader2, X, Plus, Wrench as WrenchIcon
+  Briefcase, Phone, FileText, CheckCircle, ArrowRight,
+  ArrowLeft, Zap, Droplet, Shield, Wind, Users, Hammer,
+  Lightbulb, Thermometer, AlertCircle, Loader2, X, Plus, Paintbrush, Sparkles
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { LocationSearch } from '@/components/ui/location-search'
 import { completeProviderOnboarding } from '@/app/auth/actions'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   plumber: Droplet,
   cleaning: Shield,
   hvac: Wind,
-  painting: WrenchIcon,
+  painting: Paintbrush,
   pet_handling: Users,
   'pet handling': Users,
   carpentry: Hammer,
@@ -45,12 +46,12 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   heating: Thermometer,
   security: AlertCircle,
   roofing: Shield,
-  general: Wrench,
+  general: Sparkles,
 }
 
 function getCategoryIcon(name: string): React.ElementType {
   const key = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z_]/g, '')
-  return CATEGORY_ICONS[key] ?? Wrench
+  return CATEGORY_ICONS[key] ?? Sparkles
 }
 
 // ─── Step Indicator ──────────────────────────────────────────────────────────
@@ -147,21 +148,11 @@ export default function ProviderOnboardingPage() {
         return
       }
 
-      const supabase = createClient()
-      
-      // 2. Fetch service categories from Supabase
-      const { data: cats, error: fetchError } = await supabase
-        .from('service_categories')
-        .select('id, name')
-        .order('name', { ascending: true })
-
-      if (fetchError) {
-        console.warn('Could not fetch categories from Supabase (likely RLS). Using fallbacks.', fetchError)
-        setCategories(FALLBACK_CATEGORIES)
-      } else if (cats && cats.length > 0) {
-        setCategories(cats)
-      } else {
-        console.warn('No categories found in service_categories table. Using fallbacks.')
+      try {
+        const cats = await getServiceCategories()
+        setCategories(cats.length > 0 ? cats : FALLBACK_CATEGORIES)
+      } catch (fetchError) {
+        console.warn('Could not fetch categories. Using fallbacks.', fetchError)
         setCategories(FALLBACK_CATEGORIES)
       }
 
@@ -267,7 +258,7 @@ export default function ProviderOnboardingPage() {
       sessionStorage.removeItem('_pending_provider_signup')
       
       if (result.hasSession) {
-        router.push('/dashboard/service_provider')
+        window.location.assign('/dashboard/service_provider')
       } else {
         router.push(`/login?message=${encodeURIComponent(result.message || 'Please check your email to confirm your account')}`)
       }
@@ -304,12 +295,13 @@ export default function ProviderOnboardingPage() {
 
             {/* Business Name */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label htmlFor="businessName" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Business Name <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
+                  id="businessName"
                   value={formData.businessName}
                   onChange={e => setFormData(p => ({ ...p, businessName: e.target.value }))}
                   className="pl-10"
@@ -320,16 +312,17 @@ export default function ProviderOnboardingPage() {
 
             {/* Bio */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label htmlFor="bio" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Professional Bio <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <FileText className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                 <textarea
+                  id="bio"
                   value={formData.bio}
                   onChange={e => setFormData(p => ({ ...p, bio: e.target.value }))}
                   rows={4}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent placeholder:text-gray-400 resize-none"
+                  className="w-full pl-10 pr-4 py-2 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-lg transition-[color,box-shadow,background-color] outline-none placeholder:text-gray-400 placeholder:font-normal focus-visible:border-[#3B82F6] focus-visible:ring-3 focus-visible:ring-[#3B82F6]/20 focus-visible:bg-white resize-none"
                   placeholder="Describe your experience and what makes you great at what you do..."
                 />
               </div>
@@ -337,12 +330,13 @@ export default function ProviderOnboardingPage() {
 
             {/* Phone */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label htmlFor="phone" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Phone Number <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
+                  id="phone"
                   type="tel"
                   value={formData.phone}
                   onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))}
@@ -355,24 +349,22 @@ export default function ProviderOnboardingPage() {
             {/* Location & Experience (optional) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label htmlFor="location" className="block text-sm font-semibold text-gray-700 mb-1.5">
                   Location <span className="text-gray-400 font-normal">(optional)</span>
                 </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <Input
-                    value={formData.location}
-                    onChange={e => setFormData(p => ({ ...p, location: e.target.value }))}
-                    className="pl-10"
-                    placeholder="e.g. Nairobi, Kenya"
-                  />
-                </div>
+                <LocationSearch
+                  id="location"
+                  value={formData.location}
+                  onChange={val => setFormData(p => ({ ...p, location: val }))}
+                  placeholder="Search for your city or area…"
+                />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label htmlFor="yearsExperience" className="block text-sm font-semibold text-gray-700 mb-1.5">
                   Years of Experience <span className="text-gray-400 font-normal">(optional)</span>
                 </label>
                 <Input
+                  id="yearsExperience"
                   type="number"
                   min="0"
                   max="60"
@@ -437,6 +429,7 @@ export default function ProviderOnboardingPage() {
               </p>
               <div className="flex gap-2">
                 <Input
+                  id="skillInput"
                   value={skillInput}
                   onChange={e => setSkillInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill() } }}
@@ -484,10 +477,11 @@ export default function ProviderOnboardingPage() {
 
             {/* Pricing Info */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label htmlFor="pricingInfo" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Pricing Information <span className="text-red-500">*</span>
               </label>
               <Input
+                id="pricingInfo"
                 value={formData.pricingInfo}
                 onChange={e => setFormData(p => ({ ...p, pricingInfo: e.target.value }))}
                 placeholder="e.g. Ksh 700 per visit, negotiable"
@@ -497,15 +491,16 @@ export default function ProviderOnboardingPage() {
 
             {/* Payment Method */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label htmlFor="paymentMethod" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Preferred Payment Method <span className="text-red-500">*</span>
               </label>
               <select
+                id="paymentMethod"
                 value={formData.paymentMethod}
                 onChange={e => setFormData(p => ({ ...p, paymentMethod: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent"
+                className="h-10 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 text-gray-900 transition-[color,box-shadow,background-color] outline-none focus-visible:border-[#3B82F6] focus-visible:ring-3 focus-visible:ring-[#3B82F6]/20 focus-visible:bg-white appearance-none cursor-pointer"
               >
-                <option value="">Select payment method…</option>
+                <option value="" className="text-gray-400">Select payment method…</option>
                 <option value="mpesa">M-Pesa</option>
                 <option value="till">Till Number</option>
                 <option value="pochi">Pochi la Biashara</option>
@@ -516,10 +511,11 @@ export default function ProviderOnboardingPage() {
 
             {/* Payment Details */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label htmlFor="paymentDetails" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Payment Details <span className="text-red-500">*</span>
               </label>
               <Input
+                id="paymentDetails"
                 value={formData.paymentDetails}
                 onChange={e => setFormData(p => ({ ...p, paymentDetails: e.target.value }))}
                 placeholder="e.g. 0712 345 678 or Till No: 123456"
@@ -559,10 +555,10 @@ export default function ProviderOnboardingPage() {
 
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-[#3B82F6] rounded-xl mb-3 shadow-md shadow-blue-200">
-            <Wrench className="w-6 h-6 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#3B82F6] rounded-full mb-3 shadow-md shadow-[#3B82F6]/20">
+            <span className="text-white tracking-wider font-bold text-lg">BQ</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Swift Fix — Provider Setup</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Briqoly — Provider Setup</h1>
           <p className="text-gray-500 text-sm mt-1">Complete your profile to start receiving job requests</p>
         </div>
 
@@ -583,16 +579,19 @@ export default function ProviderOnboardingPage() {
 
             {/* Navigation */}
             <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={prevStep}
-                disabled={step === 1}
-                className={`flex items-center gap-2 ${step === 1 ? 'opacity-0 pointer-events-none' : ''}`}
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </Button>
+              {step > 1 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={prevStep}
+                  className="flex items-center gap-2"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back
+                </Button>
+              ) : (
+                <span />
+              )}
 
               {step < 3 ? (
                 <Button

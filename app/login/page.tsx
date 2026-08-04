@@ -37,32 +37,30 @@ function LoginForm() {
       formDataToSubmit.append('password', formData.password)
 
       const result = await login(formDataToSubmit)
-      
+
       if (result?.error) {
-        setIsLoading(false)
         setError(result.error)
         return
       }
 
-      // If successful, handle redirect here on the client side
       if (result?.success) {
+        let destination = redirectTo
         if (result.userRole === 'provider') {
-          if (result.isOnboarded) {
-            router.push('/dashboard/service_provider')
-          } else {
-            router.push('/onboarding')
-          }
-        } else {
-          router.push(redirectTo)
+          destination = result.isOnboarded
+            ? '/dashboard/service_provider'
+            : '/onboarding/provider'
         }
-      } else {
-        setIsLoading(false)
-        setError('Login failed. Please try again.')
+
+        window.location.assign(destination)
+        return
       }
+
+      setError('Login failed. Please try again.')
     } catch (error) {
       console.error('Login error:', error)
-      setIsLoading(false)
       setError('An error occurred during login')
+    } finally {
+      setIsLoading(false)
     }
   }
 

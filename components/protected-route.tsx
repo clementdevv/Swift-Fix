@@ -2,24 +2,25 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSupabase } from '@/lib/supabase-context'
+import { useSession } from 'next-auth/react'
 
-interface ProtectedRouteProps {
+export function ProtectedRoute({
+  children,
+  redirectTo = '/login',
+}: {
   children: React.ReactNode
   redirectTo?: string
-}
-
-export function ProtectedRoute({ children, redirectTo = '/login' }: ProtectedRouteProps) {
-  const { user, loading } = useSupabase()
+}) {
+  const { data: session, status } = useSession()
   const router = useRouter()
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (status === 'unauthenticated') {
       router.push(redirectTo)
     }
-  }, [user, loading, router, redirectTo])
+  }, [status, router, redirectTo])
 
-  if (loading) {
+  if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-[#3B82F6] border-t-transparent rounded-full animate-spin" />
@@ -27,8 +28,12 @@ export function ProtectedRoute({ children, redirectTo = '/login' }: ProtectedRou
     )
   }
 
-  if (!user) {
-    return null
+  if (!session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[#3B82F6] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return <>{children}</>

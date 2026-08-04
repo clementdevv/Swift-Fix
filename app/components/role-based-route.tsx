@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { useSession } from 'next-auth/react'
 import { Loader2 } from 'lucide-react'
 
 type UserRole = 'customer' | 'provider' | 'admin'
@@ -13,63 +13,37 @@ interface RoleBasedRouteProps {
   redirectTo?: string
 }
 
-export default function RoleBasedRoute({ 
-  children, 
-  allowedRoles, 
-  redirectTo = '/login' 
+export default function RoleBasedRoute({
+  children,
+  allowedRoles,
+  redirectTo = '/login',
 }: RoleBasedRouteProps) {
-  const [loading, setLoading] = useState(true)
+  const { data: session, status } = useSession()
   const [authorized, setAuthorized] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
 
   useEffect(() => {
-    async function checkUserRole() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        
-        if (!user) {
-          router.push(`${redirectTo}?redirectTo=${window.location.pathname}`)
-          return
-        }
+    if (status === 'loading') return
 
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('user_type')
-          .eq('id', user.id)
-          .single()
-
-        if (error || !profile) {
-          router.push(redirectTo)
-          return
-        }
-
-        const userRole = profile.user_type as UserRole
-        
-        if (allowedRoles.includes(userRole)) {
-          setAuthorized(true)
-        } else {
-          // Redirect to appropriate dashboard based on role
-          if (userRole === 'admin') {
-            router.push('/admin')
-          } else if (userRole === 'provider') {
-            router.push('/dashboard/service_provider')
-          } else {
-            router.push('/dashboard/customer')
-          }
-        }
-      } catch (error) {
-        console.error('Error checking user role:', error)
-        router.push(redirectTo)
-      } finally {
-        setLoading(false)
-      }
+    if (!session) {
+      router.push(`${redirectTo}?redirectTo=${window.location.pathname}`)
+      return
     }
 
-    checkUserRole()
-  }, [allowedRoles, redirectTo, router, supabase])
+    const userRole = session.user.userType as UserRole
 
-  if (loading) {
+    if (allowedRoles.includes(userRole)) {
+      setAuthorized(true)
+    } else if (userRole === 'admin') {
+      router.push('/admin')
+    } else if (userRole === 'provider') {
+      router.push('/dashboard/service_provider')
+    } else {
+      router.push('/dashboard/client')
+    }
+  }, [session, status, allowedRoles, redirectTo, router])
+
+  if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -80,9 +54,7 @@ export default function RoleBasedRoute({
     )
   }
 
-  if (!authorized) {
-    return null // Will redirect
-  }
+  if (!authorized) return null
 
   return <>{children}</>
 }

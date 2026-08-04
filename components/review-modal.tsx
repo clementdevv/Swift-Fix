@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { createReview } from '@/lib/actions/reviews'
 import { X, Star, MessageSquare, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from './ui/button'
+import ModalOverlay from '@/components/modal-overlay'
 
 interface ReviewModalProps {
   isOpen: boolean
@@ -29,33 +30,18 @@ export default function ReviewModal({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  if (!isOpen) return null
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('You must be logged in to leave a review')
-
-      // Insert into reviews table
-      const { error: reviewError } = await supabase
-        .from('reviews')
-        .insert({
-          booking_id: bookingId,
-          reviewer_id: user.id,
-          reviewee_id: providerId,
-          rating,
-          comment
-        })
-
-      if (reviewError) throw reviewError
-
-      // Mark booking as reviewed (optional, if column exists)
-      // await supabase.from('bookings').update({ reviewed: true }).eq('id', bookingId)
+      await createReview({
+        bookingId,
+        revieweeId: providerId,
+        rating,
+        comment,
+      })
 
       setSuccess(true)
       setTimeout(() => {
@@ -74,11 +60,11 @@ export default function ReviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-opacity">
+    <ModalOverlay isOpen={isOpen} onClose={onClose} ariaLabelledBy="review-modal-title">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">Rate & Review</h2>
+          <h2 id="review-modal-title" className="text-xl font-bold text-gray-900">Rate & Review</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
@@ -175,6 +161,6 @@ export default function ReviewModal({
           </form>
         )}
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

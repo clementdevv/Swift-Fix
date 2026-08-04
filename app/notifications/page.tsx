@@ -6,7 +6,12 @@ import DashboardLayout from '@/components/dashboard-layout'
 import { clientNavigation } from '@/lib/navigation'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { createClient } from '@/utils/supabase/client'
+import {
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotification as deleteNotificationAction,
+} from '@/lib/actions/notifications'
 import {
   Bell,
   CheckCircle2,
@@ -56,28 +61,10 @@ export default function NotificationsPage() {
     try {
       setLoading(true)
       setError(null)
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data, error: fetchErr } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (fetchErr) {
-        if (fetchErr.code === '42P01') {
-          setError('Notifications table not set up yet. Please run the SQL from the setup guide in your Supabase dashboard.')
-        } else {
-          setError(fetchErr.message)
-        }
-        return
-      }
-
-      setNotifications(data ?? [])
+      const data = await getNotifications()
+      setNotifications(data)
     } catch (err: any) {
-      setError('Failed to load notifications.')
+      setError(err.message || 'Failed to load notifications.')
     } finally {
       setLoading(false)
     }
@@ -85,27 +72,22 @@ export default function NotificationsPage() {
 
   const markAllAsRead = async () => {
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      await supabase.from('notifications').update({ read: true }).eq('user_id', user.id)
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      await markAllNotificationsRead()
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
     } catch { /* silent */ }
   }
 
   const markOneRead = async (id: string) => {
     try {
-      const supabase = createClient()
-      await supabase.from('notifications').update({ read: true }).eq('id', id)
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+      await markNotificationRead(id)
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
     } catch { /* silent */ }
   }
 
   const deleteNotification = async (id: string) => {
     try {
-      const supabase = createClient()
-      await supabase.from('notifications').delete().eq('id', id)
-      setNotifications(prev => prev.filter(n => n.id !== id))
+      await deleteNotificationAction(id)
+      setNotifications((prev) => prev.filter((n) => n.id !== id))
     } catch { /* silent */ }
   }
 

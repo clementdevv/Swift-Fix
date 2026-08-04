@@ -1,327 +1,253 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server'
+import bcrypt from 'bcryptjs'
+import { prisma } from '@/lib/prisma'
+import { signIn, signOut } from '@/lib/auth'
+import { AuthError } from 'next-auth'
 import { revalidatePath } from 'next/cache'
+import { UserType } from '@/lib/generated/prisma/client'
+import { AUTH_STRINGS } from '@/lib/constants/auth'
+import { sendPasswordResetEmail } from '@/lib/email'
+import {
+  createPasswordResetToken,
+  validatePasswordResetToken,
+} from '@/lib/password-reset'
+import { passwordsMatch, validatePassword } from '@/lib/validation/password'
+import { createClient } from '@/utils/supabase/server'
+import { headers } from 'next/headers'
 
-/* =========================
-   LOGIN
-========================= */
+/* ========================= LOGIN ========================= */
 export async function login(formData: FormData) {
-  const supabase = await createClient()
-
-  const email = formData.get('email') as string
+  const email = (formData.get('email') as string)?.toLowerCase().trim()
   const password = formData.get('password') as string
 
-  // 🔍 DEBUG LOGS
-  console.log('Login attempt:', { email: email ? email.substring(0, 3) + '***' : 'missing', hasPassword: !!password })
-
   if (!email || !password) {
-    console.log('Missing credentials')
     return { error: 'Email and password are required' }
   }
 
   try {
-    // Check user exists first
-    const { data: { users } } = await supabase.auth.admin.listUsers()
-    const userExists = users.find(u => u.email === email.toLowerCase())
-    console.log('User exists in auth:', !!userExists, 'email confirmed:', userExists?.email_confirmed_at)
-
-    const { error, data } = await supabase.auth.signInWithPassword({
+    await signIn('credentials', {
       email,
       password,
+      redirect: false,
+    })
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return { error: 'Invalid email or password' }
+    }
+    throw error
+  }
+
+  // Fetch role for client-side redirect (login page uses this)
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: {
+      profile: { include: { providerProfile: true } },
+    },
+  })
+
+  const userType = user?.profile?.userType
+  const isProvider = userType === UserType.PROVIDER
+  const isOnboarded = user?.profile?.providerProfile?.onboardingCompleted ?? false
+
+  revalidatePath('/', 'layout')
+
+  return {
+    success: true,
+    userRole: isProvider ? 'provider' : 'customer',
+    isOnboarded,
+  }
+}
+
+/* ========================= SIGNUP (customer) ========================= */
+export async function signup(formData: FormData) {
+  const email = (formData.get('email') as string)?.toLowerCase().trim()
+  const password = formData.get('password') as string
+  const fullName = (formData.get('full_name') as string)?.trim()
+  const userTypeRaw = (formData.get('user_type') as string) || 'customer'
+
+  if (!email || !password || !fullName) {
+    return { error: 'All fields are required' }
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } })
+  if (existing) {
+    return { error: 'An account with this email already exists' }
+  }
+
+  const passwordValidation = validatePassword(password)
+  if (!passwordValidation.valid) {
+    return { error: passwordValidation.error }
+  }
+
+  const hashed = await bcrypt.hash(password, 12)
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          name: fullName,
+          password: hashed,
+        },
+      })
+
+      await tx.profile.create({
+        data: {
+          id: user.id,
+          fullName,
+          userType: userTypeRaw === 'provider' ? UserType.PROVIDER : UserType.CUSTOMER,
+        },
+      })
+    })
+  } catch (error) {
+    console.error('Signup failed:', error)
+    return { error: 'Signup failed. Please try again.' }
+  }
+
+  revalidatePath('/', 'layout')
+  return { success: true, message: 'Account created. You can now sign in.' }
+}
+
+/* ========================= LOGOUT ========================= */
+export async function logout() {
+  await signOut({ redirect: false })
+  revalidatePath('/', 'layout')
+  return { success: true }
+}
+
+/* ========================= PROVIDER ONBOARDING ========================= */
+export async function completeProviderOnboarding(payload: {
+  authData: { email: string; password: string; fullName: string }
+  onboardingData: {
+    business_name: string
+    bio: string
+    phone: string
+    location?: string | null
+    years_exp?: string | null
+    service_offered: string[]
+    skills: string[]
+    pricing_info: string
+    payment_method: string
+    payment_details: string
+  }
+}) {
+  const { authData, onboardingData } = payload
+  const email = authData.email.toLowerCase().trim()
+  const fullName = authData.fullName.trim()
+
+  const passwordValidation = validatePassword(authData.password)
+  if (!passwordValidation.valid) {
+    return { error: passwordValidation.error }
+  }
+
+  const hashed = await bcrypt.hash(authData.password, 12)
+
+  const existing = await prisma.user.findUnique({ where: { email } })
+  if (existing) {
+    return { error: 'An account with this email already exists' }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { email, name: fullName, password: hashed },
+      })
+
+      await tx.profile.create({
+        data: {
+          id: user.id,
+          fullName,
+          phone: onboardingData.phone,
+          userType: UserType.PROVIDER,
+          providerProfile: {
+            create: {
+              businessName: onboardingData.business_name || 'Professional',
+              bio: onboardingData.bio || null,
+              phone: onboardingData.phone || null,
+              location: onboardingData.location ?? null,
+              yearsExp: onboardingData.years_exp ? parseInt(onboardingData.years_exp) : null,
+              serviceOffered: onboardingData.service_offered.join(', '),
+              skills: onboardingData.skills,
+              pricingInfo: onboardingData.pricing_info || null,
+              paymentMethod: onboardingData.payment_method || null,
+              paymentDetails: onboardingData.payment_details || null,
+              onboardingCompleted: true,
+            },
+          },
+        },
+      })
+    })
+
+    // Auto sign-in after provider account creation
+    await signIn('credentials', {
+      email,
+      password: authData.password,
+      redirect: false,
+    })
+
+    revalidatePath('/', 'layout')
+    return { success: true, hasSession: true, message: 'Onboarding complete!' }
+  } catch (err: any) {
+    return { error: err.message || 'An unexpected error occurred' }
+  }
+}
+
+/* ========================= FORGOT PASSWORD ========================= */
+export async function forgotPassword(formData: FormData) {
+  const email = (formData.get('email') as string)?.toLowerCase().trim()
+  if (!email) return { error: 'Email is required' }
+
+  try {
+    const supabase = await createClient()
+    const origin = (await headers()).get('origin') || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/callback?next=/auth/reset-password`,
     })
 
     if (error) {
-      console.log('Supabase auth error:', error.message, 'code:', error.code)
-      
-      // If it's a confirmation error, we might still have the user object in some cases
-      // but usually signInWithPassword just fails. 
-      if (error.message.toLowerCase().includes('confirm') || error.message.toLowerCase().includes('email')) {
-         console.log('Email confirmation issues detected, but proceeding with check...')
-      } else {
-         return { error: error.message }
-      }
+      console.error('Supabase reset password error:', error)
+      return { error: error.message }
     }
-
-    const user = data?.user || (await supabase.auth.getUser()).data.user
-    const session = data?.session
-
-    console.log('Login result - User:', !!user, 'Session:', !!session)
-
-    if (!user) {
-      console.log('No user data found after sign-in attempt')
-      return { error: 'Invalid email or password' }
-    }
-
-    // If we have a user but no session, it might be an unconfirmed email.
-    // In many dev environments, we want to allow this.
-    if (user && !session) {
-      console.log('User found but no session. This usually means email is unconfirmed.')
-    }
-
-  // ✅ SAFE profile fetch
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('user_type')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  const userRole = profile?.user_type || 'customer'
-
-  console.log('User role:', userRole)
-
-  // ✅ Provider redirect
-  if (userRole === 'provider') {
-    // Check if onboarded by verifying onboarding_completed boolean
-    const { data: provider } = await supabase
-      .from('service_providers')
-      .select('onboarding_completed')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      
-    const isOnboarded = provider?.onboarding_completed === true
-    
-    console.log('Redirecting to provider dashboard, onboarded:', isOnboarded)
-    revalidatePath('/', 'layout')
-    return { success: true, userRole: 'provider', isOnboarded }
-  }
-
-  // if (userRole === 'admin') {
-  //   console.log('Redirecting to admin')
-  //   revalidatePath('/', 'layout')
-  //   return { success: true, userRole: 'admin' }
-  // }
-
-  console.log('Redirecting to client dashboard')
-  revalidatePath('/', 'layout')
-  return { success: true, userRole: 'customer' }
-
   } catch (error) {
-    console.error('Login function error:', error)
-    return { error: 'Login failed' }
+    console.error('Forgot password email failed:', error)
+    return { error: 'An unexpected error occurred' }
   }
+
+  return { success: true, message: AUTH_STRINGS.forgotPasswordSuccess }
 }
 
-
-/* =========================
-   SIGNUP
-========================= */
-// Signup function for user registration
-export async function signup(formData: FormData) {
-  const supabase = await createClient()
-
-  const email = formData.get('email') as string
+/* ========================= RESET PASSWORD ========================= */
+export async function resetPassword(formData: FormData) {
   const password = formData.get('password') as string
-  const fullName = formData.get('full_name') as string
-  const userType = (formData.get('user_type') as string) || 'customer'
+  const confirmPassword = formData.get('confirmPassword') as string
 
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        full_name: fullName,
-        user_type: userType, // 🔥 REQUIRED for trigger
-      },
-    },
-  })
-
-  if (error) {
-    return { error: 'Signup failed. ' + error.message }
+  if (!password || !confirmPassword) {
+    return { error: 'Password and confirmation are required' }
   }
 
-  // 🚫 DO NOTHING ELSE HERE
-  // Trigger handles:
-  // - profiles
-  // - service_providers (if provider)
-
-  revalidatePath('/', 'layout')
-  return { success: true, message: 'Check email to continue' }
-}
-
-
-/* =========================
-   LOGOUT
-========================= */
-export async function logout() {
-  const supabase = await createClient()
-
-  const { error } = await supabase.auth.signOut()
-
-  if (error) {
-    return { error: 'Could not sign out' }
+  if (!passwordsMatch(password, confirmPassword)) {
+    return { error: AUTH_STRINGS.passwordsDoNotMatch }
   }
 
-  revalidatePath('/', 'layout')
-  return { success: true }
-}
-
-/* =========================
-   COMPLETE PROVIDER ONBOARDING
-========================= */
-export async function completeProviderOnboarding(payload: {
-  authData: any;
-  onboardingData: {
-    business_name: string;
-    bio: string;
-    phone: string;
-    location?: string | null;
-    years_exp?: string | null;
-    service_offered: string[];
-    skills: string[];
-    pricing_info: string;
-    payment_method: string;
-    payment_details: string;
-  };
-}) {
-  const supabase = await createClient()
-  const { authData, onboardingData } = payload
-
-  // Explicitly sanitize and type-guard each field
-  const business_name = String(onboardingData?.business_name || '').trim()
-  const bio = String(onboardingData?.bio || '').trim()
-  const phone = String(onboardingData?.phone || '').trim()
-  const location = onboardingData?.location ? String(onboardingData.location).trim() : null
-  const years_exp = onboardingData?.years_exp ? parseInt(String(onboardingData.years_exp)) : null
-  const service_offered = Array.isArray(onboardingData?.service_offered) ? onboardingData.service_offered : []
-  const skills = Array.isArray(onboardingData?.skills) ? onboardingData.skills : []
-  const pricing_info = String(onboardingData?.pricing_info || '').trim()
-  const payment_method = String(onboardingData?.payment_method || '').trim()
-  const payment_details = String(onboardingData?.payment_details || '').trim()
-
-  const cleanFullName = String(authData?.fullName || '').trim()
-  const cleanEmail = String(authData?.email || '').toLowerCase().trim()
-
-  console.log('--- Provider Onboarding Start ---')
-  console.log('User:', cleanEmail)
+  const passwordValidation = validatePassword(password)
+  if (!passwordValidation.valid) {
+    return { error: passwordValidation.error }
+  }
 
   try {
-    // 1. Create the Auth account
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: authData.password,
-      options: {
-        data: {
-          full_name: cleanFullName,
-          business_name: business_name,
-          phone: phone,
-          user_type: 'provider',
-          role: 'provider',
-        },
-      },
-    })
+    const supabase = await createClient()
+    const { error } = await supabase.auth.updateUser({ password })
 
-    if (signUpError) {
-      console.error('--- SIGNUP FAILURE ---', signUpError.message)
-      return { error: signUpError.message }
+    if (error) {
+      console.error('Supabase update password error:', error)
+      return { error: error.message }
     }
-
-    const user = signUpData.user
-    if (!user) return { error: 'Auth user creation failed' }
-
-    // 2. Profiles Upsert
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert({
-        id: user.id,
-        full_name: cleanFullName,
-        phone: phone,
-        user_type: 'provider',
-        role: 'provider',
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'id' })
-
-    if (profileError) {
-      console.error('--- PROFILE UPSERT FAILURE ---', profileError.message)
-    }
-
-    // 3. Service Providers Upsert
-    const { error: providerError } = await supabase
-      .from('service_providers')
-      .upsert({
-        user_id: user.id,
-        business_name: business_name || 'Professional',
-        bio: bio || null,
-        phone: phone || null,
-        location: location,
-        years_exp: years_exp,
-        service_offered: service_offered,
-        skills: skills,
-        pricing_info: pricing_info || null,
-        payment_method: payment_method || null,
-        payment_details: payment_details || null,
-        onboarding_completed: true,
-      }, { 
-        onConflict: 'user_id',
-        ignoreDuplicates: false 
-      })
-
-    if (providerError) {
-      console.error('--- PROVIDER UPSERT FAILURE ---', providerError.message)
-      // Return the message string only, NOT the error object
-      return { error: `Failed to save provider details: ${providerError.message}` }
-    }
-
-    console.log('--- Provider Onboarding Successful ---')
-    revalidatePath('/', 'layout')
-    
-    return { 
-      success: true, 
-      hasSession: !!signUpData.session,
-      message: !!signUpData.session ? 'Onboarding complete!' : 'Please check your email to confirm registration'
-    }
-
-  } catch (err: any) {
-    console.error('--- UNEXPECTED SYSTEM ERROR ---', err)
-    // Always return a clean error string
-    return { error: err.message || 'An unexpected internal error occurred' }
-  }
-}
-
-/* =========================
-   FORGOT PASSWORD
-   Uses a direct fetch to the Supabase Auth REST API.
-   The SSR cookie-based client cannot send recovery emails reliably
-   because resetPasswordForEmail is a client-facing auth method.
-========================= */
-export async function forgotPassword(formData: FormData) {
-  const email = formData.get('email') as string
-
-  if (!email) {
-    return { error: 'Email is required' }
+  } catch (error) {
+    console.error('Reset password failed:', error)
+    return { error: 'Failed to reset password. Please try again.' }
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return { error: 'Server configuration error. Please contact support.' }
-  }
-
-  // Determine the correct redirect URL depending on environment.
-  // NEXT_PUBLIC_SITE_URL should be set to the Vercel URL in production.
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-  const redirectTo = `${siteUrl}/auth/reset-password`
-
-  console.log('--- Password Reset Requested ---', { email, redirectTo })
-
-  const res = await fetch(`${supabaseUrl}/auth/v1/recover`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': supabaseAnonKey,
-      'Authorization': `Bearer ${supabaseAnonKey}`,
-    },
-    body: JSON.stringify({ email, gotrue_meta_security: {} }),
-  })
-
-  // Supabase returns 200 even for non-existent emails (security best practice)
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    console.error('Supabase Reset Error:', body)
-    return { error: body?.msg || body?.error_description || 'Failed to send reset email.' }
-  }
-
-  console.log('Supabase accepted the reset request. Email dispatched if account exists.')
-  return { success: true }
+  return { success: true, message: AUTH_STRINGS.resetPasswordSuccess }
 }

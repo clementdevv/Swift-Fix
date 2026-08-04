@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { getProviderBookings } from '@/lib/actions/bookings'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Calendar as CalendarIcon, Clock, MapPin, User, ChevronLeft, ChevronRight, Loader2, AlertCircle, Phone } from 'lucide-react'
@@ -33,50 +33,26 @@ export default function SchedulePage() {
   const fetchSchedule = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      const data = await getProviderBookings()
+      const activeStatuses = ['confirmed', 'in_progress']
+      const filtered = data
+        .filter((b) => activeStatuses.includes(b.status))
+        .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
 
-      const { data, error: fetchErr } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          status,
-          scheduled_date,
-          scheduled_time,
-          created_at,
-          location,
-          service_categories ( name ),
-          profiles:customer_id ( full_name, phone )
-        `)
-        .eq('provider_id', user.id)
-        .in('status', ['accepted', 'confirmed', 'upcoming', 'in_progress'])
-        .order('scheduled_date', { ascending: true })
-
-      if (fetchErr) throw fetchErr
-
-      const mapped: ScheduledJob[] = (data || []).map(b => {
-        // Construct a proper Date object from the date and time strings
-        let d = new Date(b.created_at)
-        if (b.scheduled_date) {
-          const timeStr = b.scheduled_time || '09:00'
-          d = new Date(`${b.scheduled_date}T${timeStr}`)
-        }
-
-        // Supabase join results can sometimes be returned as arrays in TypeScript definitions
-        const profile = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
-        const category = Array.isArray(b.service_categories) ? b.service_categories[0] : b.service_categories
+      const mapped: ScheduledJob[] = filtered.map((b) => {
+        const timeStr = b.scheduled_time || '09:00'
+        const d = new Date(`${b.scheduled_date}T${timeStr}`)
 
         return {
           id: b.id,
-          title: category?.name || 'General Service',
-          client: profile?.full_name || 'Anonymous Client',
-          phone: profile?.phone || '',
+          title: b.service_categories?.name || 'General Service',
+          client: b.profiles?.full_name || 'Anonymous Client',
+          phone: b.profiles?.phone || '',
           time: b.scheduled_time || d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           date: d.toLocaleDateString(),
           dateObj: d,
           location: b.location || 'Client location',
-          status: b.status
+          status: b.status,
         }
       })
 

@@ -2,35 +2,21 @@
 
 import { X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
-
+import { logout } from '@/app/auth/actions'
+import ModalOverlay from '@/components/modal-overlay'
 interface LogoutModalProps {
   isOpen: boolean
   onClose: () => void
 }
-
 export default function LogoutModal({ isOpen, onClose }: LogoutModalProps) {
   const router = useRouter()
-
   const handleLogout = async () => {
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signOut()
-      
-      if (error) {
-        console.error('Logout error:', error)
-      }
-      
-      router.push('/login')
-    } catch (error) {
-      console.error('Logout error:', error)
-      router.push('/login')
-    }
+    await logout()
+    router.refresh()
+    router.push('/login')
   }
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <ModalOverlay isOpen={isOpen} onClose={onClose} ariaLabelledBy="logout-modal-title">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 relative">
         <button
           onClick={onClose}
@@ -46,7 +32,7 @@ export default function LogoutModal({ isOpen, onClose }: LogoutModalProps) {
             </svg>
           </div>
           
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <h3 id="logout-modal-title" className="text-lg font-semibold text-gray-900 mb-2">
             Confirm Logout
           </h3>
           
@@ -70,6 +56,6 @@ export default function LogoutModal({ isOpen, onClose }: LogoutModalProps) {
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

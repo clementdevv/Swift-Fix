@@ -5,7 +5,7 @@ import StatsCards from '@/app/components/StatsCards';
 import ServiceOrder, { OrderItem } from '@/app/components/ServiceOrder';
 import RecentActivity from '@/app/components/RecentActivity';
 import TransactionHistory, { Transaction } from '@/app/components/TransactionHistory';
-import { createClient } from '@/utils/supabase/client';
+import { getProviderBookings } from '@/lib/actions/bookings';
 import { DollarSign, Wrench, CheckCircle, Clock, FileText, LucideIcon, Loader2 } from 'lucide-react';
 
 export default function ServiceProviderDashboard() {
@@ -22,99 +22,86 @@ export default function ServiceProviderDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const supabase = createClient();
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const bookings = await getProviderBookings();
 
-      // 1. Fetch All Jobs for this provider
-      const { data: jobs, error } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          customer:profiles!jobs_client_id_fkey (full_name),
-          service:services (name, price)
-        `)
-        .eq('provider_id', user.id)
-        .order('created_at', { ascending: false });
+      const completed = bookings.filter((b) => b.status === 'completed');
+      const active = bookings.filter((b) => ['confirmed', 'in_progress'].includes(b.status));
+      const pending = bookings.filter((b) => b.status === 'pending');
 
-      if (error) throw error;
+      const totalRevenue = completed.reduce((acc, curr) => {
+        const price = parseFloat(
+          String(curr.service_providers?.pricing_info || '0').replace(/[^0-9.]/g, '')
+        );
+        return acc + price;
+      }, 0);
 
-      if (jobs) {
-        const bookings = jobs; // Keep the 'bookings' variable name to minimize further changes
-        // --- Calculate Stats ---
-        const completed = bookings.filter(b => b.status === 'completed');
-        const active = bookings.filter(b => ['accepted', 'in_progress'].includes(b.status));
-        const pending = bookings.filter(b => b.status === 'pending');
-        
-        const totalRevenue = completed.reduce((acc, curr) => {
-          const price = parseFloat(String(curr.price || (curr.service as any)?.price || '0').replace(/[^0-9.]/g, ''));
-          return acc + price;
-        }, 0);
+      setStats([
+        {
+          title: 'Total Revenue',
+          value: `$${totalRevenue.toLocaleString()}`,
+          change: '+0%',
+          icon: DollarSign,
+          color: 'bg-green-50 text-green-600',
+        },
+        {
+          title: 'Active Orders',
+          value: active.length.toString(),
+          change: '+0',
+          icon: Wrench,
+          color: 'bg-blue-50 text-blue-600',
+        },
+        {
+          title: 'Completed',
+          value: completed.length.toString(),
+          change: '+0',
+          icon: CheckCircle,
+          color: 'bg-purple-50 text-purple-600',
+        },
+        {
+          title: 'Pending',
+          value: pending.length.toString(),
+          change: '+0',
+          icon: Clock,
+          color: 'bg-amber-50 text-amber-600',
+        },
+      ]);
 
-        setStats([
-          {
-            title: 'Total Revenue',
-            value: `$${totalRevenue.toLocaleString()}`,
-            change: '+0%', // Placeholder for now
-            icon: DollarSign,
-            color: 'bg-green-50 text-green-600',
-          },
-          {
-            title: 'Active Orders',
-            value: active.length.toString(),
-            change: '+0',
-            icon: Wrench,
-            color: 'bg-blue-50 text-blue-600',
-          },
-          {
-            title: 'Completed',
-            value: completed.length.toString(),
-            change: '+0',
-            icon: CheckCircle,
-            color: 'bg-purple-50 text-purple-600',
-          },
-          {
-            title: 'Pending',
-            value: pending.length.toString(),
-            change: '+0',
-            icon: Clock,
-            color: 'bg-amber-50 text-amber-600',
-          },
-        ]);
+      const mappedOrders: OrderItem[] = bookings.slice(0, 5).map((b) => ({
+        id: b.id,
+        title: b.service_categories?.name || 'General Service',
+        amount: b.service_providers?.pricing_info || 'Quoted',
+        status: b.status as any,
+        date: b.scheduled_date
+          ? new Date(b.scheduled_date).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })
+          : 'TBD',
+      }));
+      setOrders(mappedOrders);
 
-        // --- Map Recent Orders ---
-        const mappedOrders: OrderItem[] = bookings.slice(0, 5).map(b => ({
-          id: b.id,
-          title: (b.service as any)?.name || b.title || 'General Service',
-          amount: b.price ? `$${b.price}` : ((b.service as any)?.price ? `$${(b.service as any).price}` : 'Quoted'),
-          status: b.status as any,
-          date: b.scheduled_at ? new Date(b.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD'
-        }));
-        setOrders(mappedOrders);
+      const mappedActivities = bookings.slice(0, 5).map((b) => ({
+        id: b.id,
+        type: 'order',
+        title: b.status === 'pending' ? 'New booking request' : `Booking ${b.status}`,
+        description: `${b.service_categories?.name || 'Service'} for ${b.profiles?.full_name || 'Client'}`,
+        time: new Date(b.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        icon: b.status === 'completed' ? CheckCircle : FileText,
+        color: b.status === 'completed' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600',
+      }));
+      setActivities(mappedActivities);
 
-        // --- Map Recent Activity ---
-        const mappedActivities = bookings.slice(0, 5).map(b => ({
-          id: b.id,
-          type: 'order',
-          title: b.status === 'pending' ? 'New booking request' : `Booking ${b.status}`,
-          description: `${(b.service as any)?.name || 'Service'} for ${(b.customer as any)?.full_name || 'Client'}`,
-          time: new Date(b.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          icon: b.status === 'completed' ? CheckCircle : FileText,
-          color: b.status === 'completed' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600',
-        }));
-        setActivities(mappedActivities);
-
-        // --- Map Transaction History (Completed Bookings) ---
-        const mappedHistory: Transaction[] = completed.slice(0, 5).map(b => ({
-          id: b.id,
-          date: b.scheduled_at ? new Date(b.scheduled_at).toLocaleDateString() : new Date(b.created_at).toLocaleDateString(),
-          service: (b.service as any)?.name || b.title || 'Service',
-          paymentStatus: 'Paid',
-          amount: b.price ? `$${b.price}` : ((b.service as any)?.price ? `$${(b.service as any).price}` : '$0')
-        }));
-        setHistory(mappedHistory);
-      }
+      const mappedHistory: Transaction[] = completed.slice(0, 5).map((b) => ({
+        id: b.id,
+        date: b.scheduled_date
+          ? new Date(b.scheduled_date).toLocaleDateString()
+          : new Date(b.created_at).toLocaleDateString(),
+        service: b.service_categories?.name || 'Service',
+        paymentStatus: 'Paid',
+        amount: b.service_providers?.pricing_info || '$0',
+      }));
+      setHistory(mappedHistory);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
     } finally {

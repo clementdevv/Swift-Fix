@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { createBooking } from '@/lib/actions/bookings'
 import { useRouter } from 'next/navigation'
 import { X, Calendar, Clock, MessageSquare, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import ModalOverlay from '@/components/modal-overlay'
 
 interface BookingModalProps {
   isOpen: boolean
@@ -30,47 +31,20 @@ export default function BookingModal({
   const [success, setSuccess] = useState(false)
   const router = useRouter()
 
-  if (!isOpen) return null
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const supabase = createClient()
-      
-      // 1. Get current user
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('You must be logged in to book a service')
+      await createBooking({
+        providerId,
+        categoryName,
+        scheduledDate: date,
+        scheduledTime: time,
+        serviceDescription: description,
+      })
 
-      // 2. Fetch category_id from service_categories (Exact case-insensitive match)
-      const { data: category, error: categoryError } = await supabase
-        .from('service_categories')
-        .select('id')
-        .ilike('name', categoryName)
-        .single();
-
-      if (categoryError || !category) {
-        throw new Error(`Invalid Service Category: ${categoryName}`)
-      }
-
-      // 3. Insert into bookings
-      const { error: bookingError } = await supabase
-        .from('bookings')
-        .insert({
-          customer_id: user.id,
-          provider_id: providerId,
-          category_id: category.id,
-          scheduled_date: date,
-          scheduled_time: time,
-          service_description: description,
-          status: 'pending'
-        })
-
-      if (bookingError) throw bookingError
-
-      // 4. Success Handling
       setSuccess(true)
       
       // Reset form state
@@ -92,11 +66,11 @@ export default function BookingModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-opacity">
+    <ModalOverlay isOpen={isOpen} onClose={onClose} ariaLabelledBy="booking-modal-title">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">Book Service</h2>
+          <h2 id="booking-modal-title" className="text-xl font-bold text-gray-900">Book Service</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
@@ -191,6 +165,6 @@ export default function BookingModal({
           </form>
         )}
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

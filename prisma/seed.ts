@@ -1,8 +1,14 @@
 
+import 'dotenv/config'
 import { PrismaClient } from '../lib/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 
-const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL! })
+const directUrl = process.env.DIRECT_URL?.trim()
+if (!directUrl) {
+  throw new Error('DIRECT_URL is not set. Add your Neon direct connection string to .env')
+}
+
+const adapter = new PrismaPg({ connectionString: directUrl })
 const prisma = new PrismaClient({ adapter })
 
 const CATEGORIES = [

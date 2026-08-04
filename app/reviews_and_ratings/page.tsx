@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import DashboardLayout from '@/components/dashboard-layout'
 import { clientNavigation } from '@/lib/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { getReviews, voteReviewHelpful } from '@/lib/actions/reviews'
 import { 
   Star, 
   Filter, 
@@ -127,41 +127,8 @@ export default function ReviewsAndRatingsPage() {
   const fetchReviews = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
-      
-      const { data, error: fetchErr } = await supabase
-        .from('reviews')
-        .select(`
-          id,
-          rating,
-          comment,
-          created_at,
-          helpful_votes,
-          bookings (
-             service_categories ( name )
-          ),
-          reviewer:reviewer_id ( full_name ),
-          reviewee:reviewee_id ( full_name )
-        `)
-        .order('created_at', { ascending: false })
-
-      if (fetchErr) throw fetchErr
-
-      const formatted = (data as any[]).map(r => ({
-        id: r.id,
-        rating: r.rating || 0,
-        comment: r.comment || '',
-        date: r.created_at,
-        helpful: r.helpful_votes || 0,
-        reviewerName: r.reviewer?.full_name || 'User',
-        reviewerAvatar: r.reviewer?.full_name?.substring(0, 2).toUpperCase() || 'U',
-        revieweeName: r.reviewee?.full_name || 'Provider',
-        revieweeAvatar: r.reviewee?.full_name?.substring(0, 2).toUpperCase() || 'P',
-        serviceType: r.bookings?.service_categories?.name || 'General Service',
-        jobTitle: `${r.bookings?.service_categories?.name || 'Service'} Job`
-      }))
-
-      setReviews(formatted)
+      const data = await getReviews()
+      setReviews(data)
     } catch (err: any) {
       console.error(err)
       setError('Failed to load reviews.')
@@ -172,17 +139,12 @@ export default function ReviewsAndRatingsPage() {
 
   const handleVoteHelpful = async (id: string) => {
     try {
-      // Optimistic UP
-      setReviews(prev => prev.map(r => r.id === id ? { ...r, helpful: r.helpful + 1 } : r))
-      
-      const supabase = createClient()
-      const review = reviews.find(r => r.id === id)
-      if (!review) return
-      
-      await supabase.from('reviews').update({ helpful_votes: review.helpful + 1 }).eq('id', id)
+      setReviews((prev) => prev.map((r) => (r.id === id ? { ...r, helpful: r.helpful + 1 } : r)))
+      await voteReviewHelpful(id)
     } catch {
-       // Revert
-       setReviews(prev => prev.map(r => r.id === id ? { ...r, helpful: Math.max(0, r.helpful - 1) } : r))
+      setReviews((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, helpful: Math.max(0, r.helpful - 1) } : r))
+      )
     }
   }
 

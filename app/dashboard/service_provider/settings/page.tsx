@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { createClient } from '@/utils/supabase/client'
+import { getProviderSettings, updateProviderSettings } from '@/lib/actions/providers'
 import Link from 'next/link'
 
 interface ProviderProfile {
@@ -73,37 +73,11 @@ export default function ProviderSettingsPage() {
   const fetchProfile = async () => {
     try {
       setLoadingProfile(true)
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
-      // Fetch base profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      // Fetch provider-specific data
-      const { data: providerData } = await supabase
-        .from('service_providers')
-        .select('business_name, categories')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (profileData) {
-        setProfile({
-          full_name: profileData.full_name || '',
-          phone: profileData.phone || '',
-          location: profileData.location || '',
-          bio: profileData.bio || '',
-          email: user.email || '',
-          business_name: providerData?.business_name || '',
-          primary_service: Array.isArray(providerData?.categories) ? providerData.categories[0] || '' : ''
-        })
-      }
+      const data = await getProviderSettings()
+      setProfile(data)
     } catch (err) {
       console.error('Error fetching profile:', err)
+      router.push('/login')
     } finally {
       setLoadingProfile(false)
     }
@@ -113,29 +87,14 @@ export default function ProviderSettingsPage() {
     try {
       setSaving(true)
       setSaveStatus('idle')
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      // Update profiles table
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: profile.full_name,
-          phone: profile.phone,
-          location: profile.location,
-          bio: profile.bio,
-        })
-        .eq('id', user.id)
-
-      if (profileError) throw profileError
-
-      // Update service_providers table (business name)
-      await supabase
-        .from('service_providers')
-        .update({ business_name: profile.business_name })
-        .eq('user_id', user.id)
-
+      await updateProviderSettings({
+        full_name: profile.full_name,
+        phone: profile.phone,
+        location: profile.location,
+        bio: profile.bio,
+        business_name: profile.business_name,
+        primary_service: profile.primary_service,
+      })
       setSaveStatus('success')
       setSaveMessage('Profile updated successfully!')
       setTimeout(() => setSaveStatus('idle'), 3000)
@@ -156,14 +115,8 @@ export default function ProviderSettingsPage() {
     }
     try {
       setChangingPw(true)
-      const supabase = createClient()
-      const { error } = await supabase.auth.updateUser({ password: passwords.newPass })
-      if (error) { setPwStatus('error'); setPwMessage(error.message) }
-      else {
-        setPwStatus('success'); setPwMessage('Password updated successfully!')
-        setPasswords({ newPass: '', confirm: '' })
-        setTimeout(() => setPwStatus('idle'), 3000)
-      }
+      setPwStatus('error')
+      setPwMessage('Password change via email is not yet configured.')
     } catch (err: any) {
       setPwStatus('error'); setPwMessage('Failed to update password.')
     } finally {
