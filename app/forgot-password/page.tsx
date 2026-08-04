@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { forgotPassword } from '@/app/auth/actions'
+import { AUTH_STRINGS } from '@/lib/constants/auth'
 
 function ForgotPasswordForm() {
   const [email, setEmail] = useState('')
@@ -55,7 +56,7 @@ function ForgotPasswordForm() {
                 <div className="mb-8">
                   <h2 className="text-[22px] font-semibold text-gray-900">Forgot password?</h2>
                   <p className="text-sm font-normal text-gray-500 mt-2">
-                    Enter your email and we&apos;ll send reset instructions when email delivery is enabled.
+                    Enter your email and we&apos;ll send you a link to reset your password.
                   </p>
                 </div>
 
@@ -119,8 +120,7 @@ function ForgotPasswordForm() {
                 </div>
                 <h2 className="text-[22px] font-semibold text-gray-900">Request received</h2>
                 <p className="text-sm font-normal text-gray-500 mt-2">
-                  If an account exists for <span className="font-medium text-gray-900">{email}</span>, you will
-                  receive reset instructions once email delivery is configured.
+                  {AUTH_STRINGS.forgotPasswordSuccess}
                 </p>
                 <Button
                   asChild

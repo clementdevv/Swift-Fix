@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from 'next-auth'
+import { getAuthSecret } from '@/lib/env'
 
 /** Maps Prisma enum CUSTOMER/PROVIDER → app's lowercase strings */
 function mapUserType(prismaType?: string): 'customer' | 'provider' {
@@ -6,6 +7,8 @@ function mapUserType(prismaType?: string): 'customer' | 'provider' {
 }
 
 export const authConfig = {
+  secret: getAuthSecret(),
+  trustHost: true,
   pages: {
     signIn: '/login',
   },

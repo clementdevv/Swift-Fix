@@ -1,0 +1,46 @@
+@baseUrl = http://localhost:3000
+
+### =========================================
+### STANDARD REST ENDPOINTS
+### (These can be tested easily in this file)
+### =========================================
+
+### 1. User Signup
+# Creates a new user in the database
+POST {{baseUrl}}/api/signup
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "password": "SecurePass123!",
+  "name": "Test User",
+  "userType": "CUSTOMER"
+}
+
+### 2. NextAuth Session Check
+# This will likely return empty unless you pass the exact session cookie
+GET {{baseUrl}}/api/auth/session
+
+### =========================================
+### SERVER ACTIONS WARNING
+### =========================================
+# The rest of your app (Bookings, Profile, Chat, Services) uses Next.js Server Actions.
+# Server Actions are NOT standard REST APIs.
+# 
+# To call a Server Action via HTTP, you must provide a specific "Next-Action" header ID,
+# which Next.js generates dynamically and changes every time you restart the dev server!
+# 
+# Example of what a Server Action request looks like (THIS WILL LIKELY FAIL):
+#
+# POST {{baseUrl}}/
+# Next-Action: 1234567890abcdef (This ID changes constantly!)
+# Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+#
+# ------WebKitFormBoundary7MA4YWxkTrZu0gW
+# Content-Disposition: form-data; name="1_id"
+#
+# some_booking_id
+# ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+#
+# If you want to be able to test things like "Create Booking" or "Send Message" cleanly
+# in this file, we need to create standard Route Handlers (app/api/bookings/route.ts).

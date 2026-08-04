@@ -12,6 +12,85 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { signup } from '@/app/auth/actions'
+import { AUTH_STRINGS } from '@/lib/constants/auth'
+import {
+  getPasswordStrength,
+  passwordsMatch,
+  validatePassword,
+} from '@/lib/validation/password'
+
+const RoleSelection = ({ onSelect }: { onSelect: (role: 'provider' | 'customer') => void }) => (
+  <div className="p-12">
+    <div className="text-center mb-8">
+      <h2 className="text-2xl font-bold text-gray-900 mb-2">How would you like to join?</h2>
+      <p className="text-sm text-gray-500">Choose your role to get started</p>
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Service Provider Option */}
+      <button
+        onClick={() => onSelect('provider')}
+        className="p-6 border border-gray-200 rounded-xl hover:border-[#93C5FD] hover:bg-[#EFF6FF] transition-all duration-300 text-left group flex flex-col justify-between"
+      >
+        <div className="flex items-center justify-between mb-4 w-full">
+          <div className="w-12 h-12 bg-gradient-to-br from-[#60A5FA] to-[#3B82F6] rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
+            <Briefcase className="w-6 h-6 text-white" />
+          </div>
+          <ArrowRight className="text-[#3B82F6] opacity-0 group-hover:opacity-100 transition-opacity font-bold text-xl" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">Service Provider</h3>
+          <p className="text-[#2563EB] text-sm mb-4 font-medium">Offer your services and grow your business</p>
+          <ul className="space-y-2 text-xs text-gray-600">
+            <li className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[#3B82F6] flex-shrink-0 font-bold" />
+              Professional profile
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[#3B82F6] flex-shrink-0 font-bold" />
+              Take on jobs & earn
+            </li>
+          </ul>
+        </div>
+      </button>
+
+      {/* Client Option */}
+      <button
+        onClick={() => onSelect('customer')}
+        className="p-6 border border-gray-200 rounded-xl hover:border-[#93C5FD] hover:bg-[#EFF6FF] transition-all duration-300 text-left group flex flex-col justify-between"
+      >
+        <div className="flex items-center justify-between mb-4 w-full">
+          <div className="w-12 h-12 bg-gradient-to-br from-[#60A5FA] to-[#3B82F6] rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
+            <Users className="w-6 h-6 text-white" />
+          </div>
+          <ArrowRight className="text-[#3B82F6] opacity-0 group-hover:opacity-100 transition-opacity font-bold text-xl" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">Client</h3>
+          <p className="text-[#2563EB] text-sm mb-4 font-medium">Find and hire service professionals</p>
+          <ul className="space-y-2 text-xs text-gray-600">
+            <li className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[#3B82F6] flex-shrink-0 font-bold" />
+              Browse service providers
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[#3B82F6] flex-shrink-0 font-bold" />
+              Easy booking & payment
+            </li>
+          </ul>
+        </div>
+      </button>
+    </div>
+
+    <p className="text-center text-sm text-gray-600 mt-8">
+      Already have an account?{' '}
+      <Link href="/login" className="text-[#3B82F6] hover:text-[#2563EB] font-bold transition-colors">
+        Sign in
+      </Link>
+    </p>
+  </div>
+)
+
 
 export default function SignupPage() {
   const router = useRouter()
@@ -31,21 +110,19 @@ export default function SignupPage() {
     agreeTerms: false
   })
 
-  const checkPasswordStrength = (password: string) => {
-    let strength = 0
-    if (password.length >= 8) strength++
-    if (password.match(/[a-z]+/)) strength++
-    if (password.match(/[A-Z]+/)) strength++
-    if (password.match(/[0-9]+/)) strength++
-    if (password.match(/[$@#&!]+/)) strength++
-    return strength
-  }
-
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newPassword = e.target.value
     setFormData({ ...formData, password: newPassword })
-    setPasswordStrength(checkPasswordStrength(newPassword))
+    setPasswordStrength(getPasswordStrength(newPassword))
   }
+
+  const passwordsAreMatching = passwordsMatch(formData.password, formData.confirmPassword)
+  const passwordValidation = validatePassword(formData.password)
+  const canSubmit =
+    passwordValidation.valid &&
+    passwordsAreMatching &&
+    formData.confirmPassword.length > 0 &&
+    formData.agreeTerms
 
   const getStrengthColor = () => {
     if (passwordStrength <= 2) return 'bg-red-600'
@@ -59,12 +136,24 @@ export default function SignupPage() {
     return 'Strong'
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const getStrengthTextColor = () => {
+    if (passwordStrength <= 2) return 'text-red-600'
+    if (passwordStrength <= 3) return 'text-amber-600'
+    return 'text-[#3B82F6]'
+  }
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setRegisterError(null)
 
-    if (formData.password !== formData.confirmPassword) {
-      setRegisterError("Passwords don't match")
+    const validation = validatePassword(formData.password)
+    if (!validation.valid) {
+      setRegisterError(validation.error ?? AUTH_STRINGS.passwordTooShort)
+      return
+    }
+
+    if (!passwordsMatch(formData.password, formData.confirmPassword)) {
+      setRegisterError(AUTH_STRINGS.passwordsDoNotMatch)
       return
     }
 
@@ -133,75 +222,7 @@ export default function SignupPage() {
         <Card className="overflow-hidden border-0 shadow-[0_10px_25px_rgba(0,0,0,0.08)]" style={{ borderRadius: '12px' }}>
           {step === 0 ? (
             // STEP 1: Choose Role
-            <div className="p-12">
-              <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">How would you like to join?</h2>
-                <p className="text-sm text-gray-500">Choose your role to get started</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Service Provider Option */}
-                <button
-                  onClick={() => handleRoleSelect('provider')}
-                  className="p-6 border border-gray-200 rounded-xl hover:border-[#93C5FD] hover:bg-[#EFF6FF] transition-all duration-300 text-left group flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between mb-4 w-full">
-                    <div className="w-12 h-12 bg-gradient-to-br from-[#60A5FA] to-[#3B82F6] rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
-                      <Briefcase className="w-6 h-6 text-white" />
-                    </div>
-                    <ArrowRight className="text-[#3B82F6] opacity-0 group-hover:opacity-100 transition-opacity font-bold text-xl" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">Service Provider</h3>
-                    <p className="text-[#2563EB] text-sm mb-4 font-medium">Offer your services and grow your business</p>
-                    <ul className="space-y-2 text-xs text-gray-600">
-                      <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-[#3B82F6] flex-shrink-0 font-bold" />
-                        Professional profile
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-[#3B82F6] flex-shrink-0 font-bold" />
-                        Take on jobs & earn
-                      </li>
-                    </ul>
-                  </div>
-                </button>
-
-                {/* Client Option */}
-                <button
-                  onClick={() => handleRoleSelect('customer')}
-                  className="p-6 border border-gray-200 rounded-xl hover:border-[#93C5FD] hover:bg-[#EFF6FF] transition-all duration-300 text-left group flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between mb-4 w-full">
-                    <div className="w-12 h-12 bg-gradient-to-br from-[#60A5FA] to-[#3B82F6] rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
-                      <Users className="w-6 h-6 text-white" />
-                    </div>
-                    <ArrowRight className="text-[#3B82F6] opacity-0 group-hover:opacity-100 transition-opacity font-bold text-xl" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">Client</h3>
-                    <p className="text-[#2563EB] text-sm mb-4 font-medium">Find and hire service professionals</p>
-                    <ul className="space-y-2 text-xs text-gray-600">
-                      <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-[#3B82F6] flex-shrink-0 font-bold" />
-                        Browse service providers
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-[#3B82F6] flex-shrink-0 font-bold" />
-                        Easy booking & payment
-                      </li>
-                    </ul>
-                  </div>
-                </button>
-              </div>
-
-              <p className="text-center text-sm text-gray-600 mt-8">
-                Already have an account?{' '}
-                <Link href="/login" className="text-[#3B82F6] hover:text-[#2563EB] font-bold transition-colors">
-                  Sign in
-                </Link>
-              </p>
-            </div>
+            <RoleSelection onSelect={handleRoleSelect} />
           ) : (
             // STEP 2: Registration Form
             <div className="p-8 bg-white">
@@ -233,12 +254,13 @@ export default function SignupPage() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Full Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
                     Full Name *
                   </label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#3B82F6]" />
                     <Input
+                      id="fullName"
                       type="text"
                       value={formData.fullName}
                       onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
@@ -251,12 +273,13 @@ export default function SignupPage() {
 
                 {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                     Email Address *
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#3B82F6]" />
                     <Input
+                      id="email"
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -269,12 +292,13 @@ export default function SignupPage() {
 
                 {/* Password */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                     Password *
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#3B82F6]" />
                     <Input
+                      id="password"
                       type={showPassword ? "text" : "password"}
                       value={formData.password}
                       onChange={handlePasswordChange}
@@ -301,21 +325,32 @@ export default function SignupPage() {
                         <div className={`h-2 flex-1 rounded-full ${passwordStrength >= 4 ? getStrengthColor() : 'bg-gray-200'}`} />
                         <div className={`h-2 flex-1 rounded-full ${passwordStrength >= 5 ? getStrengthColor() : 'bg-gray-200'}`} />
                       </div>
-                      <p className={`text-xs font-bold ${passwordStrength <= 2 ? 'text-red-600' : passwordStrength <= 3 ? 'text-amber-600' : 'text-[#3B82F6]'}`}>
+                      <p className={`text-xs font-bold ${getStrengthTextColor()}`}>
                         Password strength: {getStrengthText()}
                       </p>
                     </div>
+                  )}
+                  {formData.password && !passwordValidation.valid ? (
+                    <p className="mt-2 text-xs text-red-600 font-medium flex items-center gap-1">
+                      <XCircle className="w-4 h-4" />
+                      {passwordValidation.error || 'Invalid password'}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-gray-500">
+                      8+ characters, includes a special symbol
+                    </p>
                   )}
                 </div>
 
                 {/* Confirm Password */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
                     Confirm Password *
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#3B82F6]" />
                     <Input
+                      id="confirmPassword"
                       type={showConfirmPassword ? "text" : "password"}
                       value={formData.confirmPassword}
                       onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
@@ -331,13 +366,13 @@ export default function SignupPage() {
                       {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                  {formData.confirmPassword && !passwordsAreMatching && (
                     <p className="mt-1 text-xs text-red-600 font-bold flex items-center gap-1">
                       <XCircle className="w-4 h-4" />
                       Passwords do not match
                     </p>
                   )}
-                  {formData.confirmPassword && formData.password === formData.confirmPassword && formData.password && (
+                  {formData.confirmPassword && passwordsAreMatching && formData.password && (
                     <p className="mt-1 text-xs text-[#3B82F6] font-bold flex items-center gap-1">
                       <CheckCircle className="w-4 h-4" />
                       Passwords match
@@ -368,13 +403,13 @@ export default function SignupPage() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !canSubmit}
                   className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white font-medium py-2.5 rounded-lg transition-colors mt-6"
                 >
                   {isLoading ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      {userType === 'provider' ? 'Creating account...' : 'Creating account...'}
+                      Creating account...
                     </>
                   ) : (
                     <>

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Settings, Plus, Edit2, Trash2, X, Check, Loader2, AlertCircle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import ModalOverlay from '@/components/modal-overlay'
 
 
 // DB interface
@@ -227,11 +228,14 @@ export default function MyServicesPage() {
       )}
 
       {/* Slide-over or Modal for Add/Edit */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+      <ModalOverlay
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        ariaLabelledBy="service-modal-title"
+      >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h2 className="text-xl font-bold text-slate-900">
+              <h2 id="service-modal-title" className="text-xl font-bold text-slate-900">
                 {editingId ? 'Edit Service' : 'Add New Service'}
               </h2>
               <button 
@@ -321,8 +325,7 @@ export default function MyServicesPage() {
               </div>
             </form>
           </div>
-        </div>
-      )}
+      </ModalOverlay>
     </div>
   )
 }

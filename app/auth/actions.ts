@@ -6,10 +6,19 @@ import { signIn, signOut } from '@/lib/auth'
 import { AuthError } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { UserType } from '@/lib/generated/prisma/client'
+import { AUTH_STRINGS } from '@/lib/constants/auth'
+import { sendPasswordResetEmail } from '@/lib/email'
+import {
+  createPasswordResetToken,
+  validatePasswordResetToken,
+} from '@/lib/password-reset'
+import { passwordsMatch, validatePassword } from '@/lib/validation/password'
+import { createClient } from '@/utils/supabase/server'
+import { headers } from 'next/headers'
 
 /* ========================= LOGIN ========================= */
 export async function login(formData: FormData) {
-  const email = formData.get('email') as string
+  const email = (formData.get('email') as string)?.toLowerCase().trim()
   const password = formData.get('password') as string
 
   if (!email || !password) {
@@ -31,7 +40,7 @@ export async function login(formData: FormData) {
 
   // Fetch role for client-side redirect (login page uses this)
   const user = await prisma.user.findUnique({
-    where: { email: email.toLowerCase() },
+    where: { email },
     include: {
       profile: { include: { providerProfile: true } },
     },
@@ -66,6 +75,11 @@ export async function signup(formData: FormData) {
     return { error: 'An account with this email already exists' }
   }
 
+  const passwordValidation = validatePassword(password)
+  if (!passwordValidation.valid) {
+    return { error: passwordValidation.error }
+  }
+
   const hashed = await bcrypt.hash(password, 12)
 
   try {
@@ -86,7 +100,8 @@ export async function signup(formData: FormData) {
         },
       })
     })
-  } catch {
+  } catch (error) {
+    console.error('Signup failed:', error)
     return { error: 'Signup failed. Please try again.' }
   }
 
@@ -120,6 +135,12 @@ export async function completeProviderOnboarding(payload: {
   const { authData, onboardingData } = payload
   const email = authData.email.toLowerCase().trim()
   const fullName = authData.fullName.trim()
+
+  const passwordValidation = validatePassword(authData.password)
+  if (!passwordValidation.valid) {
+    return { error: passwordValidation.error }
+  }
+
   const hashed = await bcrypt.hash(authData.password, 12)
 
   const existing = await prisma.user.findUnique({ where: { email } })
@@ -172,11 +193,61 @@ export async function completeProviderOnboarding(payload: {
   }
 }
 
-/* ========================= FORGOT PASSWORD (stub) ========================= */
+/* ========================= FORGOT PASSWORD ========================= */
 export async function forgotPassword(formData: FormData) {
-  const email = formData.get('email') as string
+  const email = (formData.get('email') as string)?.toLowerCase().trim()
   if (!email) return { error: 'Email is required' }
 
-  // TODO: implement with Resend + VerificationToken table
-  return { success: true }
+  try {
+    const supabase = await createClient()
+    const origin = (await headers()).get('origin') || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/callback?next=/auth/reset-password`,
+    })
+
+    if (error) {
+      console.error('Supabase reset password error:', error)
+      return { error: error.message }
+    }
+  } catch (error) {
+    console.error('Forgot password email failed:', error)
+    return { error: 'An unexpected error occurred' }
+  }
+
+  return { success: true, message: AUTH_STRINGS.forgotPasswordSuccess }
+}
+
+/* ========================= RESET PASSWORD ========================= */
+export async function resetPassword(formData: FormData) {
+  const password = formData.get('password') as string
+  const confirmPassword = formData.get('confirmPassword') as string
+
+  if (!password || !confirmPassword) {
+    return { error: 'Password and confirmation are required' }
+  }
+
+  if (!passwordsMatch(password, confirmPassword)) {
+    return { error: AUTH_STRINGS.passwordsDoNotMatch }
+  }
+
+  const passwordValidation = validatePassword(password)
+  if (!passwordValidation.valid) {
+    return { error: passwordValidation.error }
+  }
+
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase.auth.updateUser({ password })
+
+    if (error) {
+      console.error('Supabase update password error:', error)
+      return { error: error.message }
+    }
+  } catch (error) {
+    console.error('Reset password failed:', error)
+    return { error: 'Failed to reset password. Please try again.' }
+  }
+
+  return { success: true, message: AUTH_STRINGS.resetPasswordSuccess }
 }

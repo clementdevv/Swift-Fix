@@ -76,6 +76,13 @@ model VerificationToken {
 enum UserType {
   CUSTOMER
   PROVIDER
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum BookingStatus {
@@ -107,6 +114,8 @@ model Profile {
   reviewsWritten   Review[]          @relation("ReviewsWritten")
   reviewsReceived  Review[]          @relation("ReviewsReceived")
   notifications    Notification[]
+  conversations    Conversation[]
+  messages         Message[]
 
   @@map("profiles")
 }
@@ -212,4 +221,34 @@ model Notification {
 
   @@index([userId])
   @@map("notifications")
+}
+
+// ─── Chat models ─────────────────────────────────────────────────────────────
+
+model Conversation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  participants Profile[]
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  senderId       String       @map("sender_id")
+  sender         Profile      @relation(fields: [senderId], references: [id])
+  
+  content        String
+  isRead         Boolean      @default(false) @map("is_read")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@map("messages")
 }

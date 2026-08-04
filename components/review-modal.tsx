@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createReview } from '@/lib/actions/reviews'
 import { X, Star, MessageSquare, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from './ui/button'
+import ModalOverlay from '@/components/modal-overlay'
 
 interface ReviewModalProps {
   isOpen: boolean
@@ -28,8 +29,6 @@ export default function ReviewModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-
-  if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,11 +60,11 @@ export default function ReviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-opacity">
+    <ModalOverlay isOpen={isOpen} onClose={onClose} ariaLabelledBy="review-modal-title">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">Rate & Review</h2>
+          <h2 id="review-modal-title" className="text-xl font-bold text-gray-900">Rate & Review</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
@@ -162,6 +161,6 @@ export default function ReviewModal({
           </form>
         )}
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
